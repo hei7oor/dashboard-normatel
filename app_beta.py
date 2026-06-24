@@ -521,7 +521,7 @@ with st.container():
     with f2:
         st.markdown('<div class="flt-lbl">🏭 BASES</div>', unsafe_allow_html=True)
         bases_disp = sap_ok if sap_ok else ["UTGSUL","TIMS","UTGC"]
-        bases_sel  = st.multiselect("b", bases_disp, default=bases_disp,
+        bases_sel  = st.multiselect("b", bases_disp, default=[],
                                     placeholder="Todas as bases",
                                     key="bases_sel", label_visibility="collapsed")
         if not bases_sel:
@@ -542,7 +542,7 @@ with st.container():
     with g1:
         st.markdown('<div class="flt-lbl">🔧 TIPO DE ORDEM</div>', unsafe_allow_html=True)
         tipos_ord = st.multiselect("t", ["PREVENTIVAS","CORRETIVAS"],
-                                   default=["PREVENTIVAS","CORRETIVAS"],
+                                   default=[],
                                    placeholder="Todos", key="tipos_ord",
                                    label_visibility="collapsed")
         if not tipos_ord:
@@ -551,7 +551,7 @@ with st.container():
         st.markdown('<div class="flt-lbl">⚙️ STATUS</div>', unsafe_allow_html=True)
         if prod_ok:
             status_prod = st.multiselect("s", ["A realizar","Em andamento","Finalizada"],
-                                         default=["A realizar","Em andamento","Finalizada"],
+                                         default=[],
                                          placeholder="Todos", key="status_prod",
                                          label_visibility="collapsed")
             if not status_prod:
@@ -562,7 +562,7 @@ with st.container():
         st.markdown('<div class="flt-lbl">🛠️ SERVIÇO</div>', unsafe_allow_html=True)
         if prod_ok:
             tipos_serv = sorted(PROD["_tipo_serv"].unique().tolist())
-            serv_sel = st.multiselect("sv", tipos_serv, default=tipos_serv,
+            serv_sel = st.multiselect("sv", tipos_serv, default=[],
                                       placeholder="Todos", key="serv_sel",
                                       label_visibility="collapsed")
             if not serv_sel:
@@ -653,57 +653,85 @@ def _calcular_respostas_ia():
             prod_r = kpis_prod(df_p)
 
     bases = list(r.keys())
+    # % de execução por base (executadas / total)
+    def _execp(b):
+        t = r[b].get("total", 0)
+        return (r[b].get("exec_", 0) / t * 100) if t else 0
 
     respostas = {}
 
     # 0 — Resumo geral
     linhas = []
+    tot_g = exec_g = abert_g = 0
     for b in bases:
         d = r[b]
-        linhas.append(f"**{b}:** {d.get('total',0):,} ordens · {d.get('exec_perc',0):.0f}% executadas · {d.get('atrasadas',0)} atrasadas")
-    if prod_r:
-        linhas.append(f"**Produtivo:** {prod_r.get('total',0):,} atividades · {prod_r.get('fin_perc',0):.0f}% finalizadas")
-    respostas[0] = "\n\n".join(linhas) if linhas else "Sem dados carregados."
+        tot_g += d.get("total", 0); exec_g += d.get("exec_", 0); abert_g += d.get("abert", 0)
+        linhas.append(f"**{b}** — {d.get('total',0):,} ordens · {d.get('exec_',0):,} executadas ({_execp(b):.0f}%) · {d.get('abert',0):,} abertas")
+    if linhas:
+        ep = (exec_g/tot_g*100) if tot_g else 0
+        cab = f"📊 **{tot_g:,} ordens** no período · **{exec_g:,} executadas ({ep:.0f}%)** · **{abert_g:,} em aberto**"
+        corpo = "\n\n".join(linhas)
+        rodape = f"\n\n⚙️ **Produtivo:** {prod_r.get('total',0):,} atividades, {prod_r.get('finalizadas',0):,} finalizadas ({prod_r.get('fin_perc',0):.0f}%)" if prod_r else ""
+        respostas[0] = f"{cab}\n\n{corpo}{rodape}"
+    else:
+        respostas[0] = "Sem dados SAP no período selecionado."
 
-    # 1 — Ordens atrasadas
+    # 1 — Pendências e atrasos
     linhas = []
+    tot_at = 0
     for b in bases:
-        at = r[b].get("atrasadas", 0)
-        tot = max(r[b].get("total", 1), 1)
-        linhas.append(f"**{b}:** {at:,} atrasadas ({at/tot*100:.1f}% do total)")
-    respostas[1] = "\n\n".join(linhas) if linhas else "Sem dados SAP."
+        at = r[b].get("atrasadas", 0); ab = r[b].get("abert", 0); tot_at += at
+        alerta = "🔴" if at > 0 else "🟢"
+        linhas.append(f"{alerta} **{b}** — {ab:,} ordens em aberto, **{at:,} já vencidas**")
+    if linhas:
+        respostas[1] = f"⏰ **{tot_at:,} ordens vencidas** (prazo passou e não foram executadas):\n\n" + "\n\n".join(linhas)
+    else:
+        respostas[1] = "Sem dados SAP."
 
     # 2 — Preventivas vs Corretivas
     linhas = []
+    tp = tc = 0
     for b in bases:
-        prev = r[b].get("preventivas", 0); corr = r[b].get("corretivas", 0)
-        linhas.append(f"**{b}:** {prev:,} preventivas · {corr:,} corretivas")
-    respostas[2] = "\n\n".join(linhas) if linhas else "Sem dados SAP."
+        prev = r[b].get("prev", 0); corr = r[b].get("corr", 0); tp += prev; tc += corr
+        tot_pc = prev + corr
+        perc_p = (prev/tot_pc*100) if tot_pc else 0
+        linhas.append(f"**{b}** — {prev:,} preventivas ({perc_p:.0f}%) · {corr:,} corretivas")
+    if linhas:
+        tt = tp + tc
+        pp = (tp/tt*100) if tt else 0
+        diag = "✅ Predomínio de preventivas (manutenção planejada — ideal)." if pp >= 50 else "⚠️ Corretivas em alta — atenção ao planejamento preventivo."
+        respostas[2] = f"🔧 **{tp:,} preventivas vs {tc:,} corretivas** ({pp:.0f}% preventivas)\n\n" + "\n\n".join(linhas) + f"\n\n{diag}"
+    else:
+        respostas[2] = "Sem dados SAP."
 
-    # 3 — Melhor desempenho
+    # 3 — Ranking de desempenho
     if bases:
-        melhor = max(bases, key=lambda b: r[b].get("exec_perc", 0))
-        pior   = min(bases, key=lambda b: r[b].get("exec_perc", 0))
-        respostas[3] = (f"🥇 **{melhor}** lidera com {r[melhor].get('exec_perc',0):.0f}% de execução "
-                        f"({r[melhor].get('total',0):,} ordens).\n\n"
-                        f"⚠️ **{pior}** precisa de atenção: {r[pior].get('exec_perc',0):.0f}% executado "
-                        f"e {r[pior].get('atrasadas',0)} atrasadas.")
+        rank = sorted(bases, key=_execp, reverse=True)
+        linhas = []
+        medalhas = ["🥇", "🥈", "🥉"]
+        for i, b in enumerate(rank):
+            m = medalhas[i] if i < 3 else "▪️"
+            linhas.append(f"{m} **{b}** — {_execp(b):.0f}% executado · {r[b].get('atrasadas',0):,} vencidas")
+        respostas[3] = "🏆 **Ranking por % de execução:**\n\n" + "\n\n".join(linhas)
     else:
         respostas[3] = "Sem dados SAP."
 
     # 4 — Status Produtivo
     if prod_r:
-        respostas[4] = (f"**Total:** {prod_r.get('total',0):,} atividades\n\n"
-                        f"✅ **Finalizadas:** {prod_r.get('finalizadas',0):,} ({prod_r.get('fin_perc',0):.0f}%)\n\n"
-                        f"🔄 **Em andamento:** {prod_r.get('andamento',0):,}\n\n"
-                        f"📋 **A realizar:** {prod_r.get('realizar',0):,}")
+        t = prod_r.get("total", 0)
+        fin = prod_r.get("finalizadas", 0); an = prod_r.get("andamento", 0); re_ = prod_r.get("realizar", 0)
+        pa = (an/t*100) if t else 0; pr_ = (re_/t*100) if t else 0
+        respostas[4] = (f"⚙️ **{t:,} atividades de campo:**\n\n"
+                        f"✅ **Finalizadas:** {fin:,} ({prod_r.get('fin_perc',0):.0f}%)\n\n"
+                        f"🔄 **Em andamento:** {an:,} ({pa:.0f}%)\n\n"
+                        f"📋 **A realizar:** {re_:,} ({pr_:.0f}%)")
     else:
         respostas[4] = "Nenhum dado do Produtivo carregado."
 
     return respostas
 
 # Pré-calcula respostas uma única vez por sessão (recalcula se filtros mudaram)
-_cache_key = str(p_ini) + str(p_fim) + str(bases_sel) + str(tipos_ord)
+_cache_key = f"{p_ini}{p_fim}{bases_sel}{tipos_ord}{status_prod}{serv_sel}{busca}{fonte}"
 if st.session_state.get("_ia_cache_key") != _cache_key:
     st.session_state["_ia_respostas"] = _calcular_respostas_ia()
     st.session_state["_ia_cache_key"] = _cache_key
@@ -712,9 +740,9 @@ _IA_RESPOSTAS = st.session_state["_ia_respostas"]
 
 _IA_PERGUNTAS = [
     ("📊", "Resumo geral"),
-    ("⏰", "Ordens atrasadas"),
+    ("⏰", "Pendências e atrasos"),
     ("🔧", "Preventivas vs Corretivas"),
-    ("🏆", "Melhor desempenho"),
+    ("🏆", "Ranking das bases"),
     ("⚙️", "Status Produtivo"),
 ]
 
