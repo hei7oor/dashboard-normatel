@@ -10,7 +10,7 @@ from datetime import datetime, date
 # CONFIGURAÇÃO
 # ════════════════════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="Normatel — Dashboard (BETA)",
+    page_title="Normatel — Dashboard de Planejamento",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -489,7 +489,7 @@ st.markdown(f"""
 <div class="norm-header">
   {logo_tag}
   <div class="norm-header-text">
-    <h1>Dashboard de Planejamento <span style="background:#F9A825;color:#1B5E20;font-size:.7rem;padding:2px 10px;border-radius:12px;vertical-align:middle;font-weight:800;letter-spacing:.5px">BETA</span></h1>
+    <h1>Dashboard de Planejamento</h1>
     <p>Gestão Integrada de Manutenção &nbsp;·&nbsp; SAP PM + Produtivo &nbsp;·&nbsp; UTGSUL &nbsp;·&nbsp; TIMS &nbsp;·&nbsp; UTGC</p>
   </div>
   <div class="norm-header-info">
