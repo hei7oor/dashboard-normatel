@@ -69,18 +69,15 @@ button[kind="headerNoPadding"] {{ background:transparent !important; border:none
 }}
 /* compacta o espaçamento geral interno */
 [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{
-  padding-top: 12px !important;
-}}
-[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
-  gap: 0.35rem !important;
+  padding-top: 14px !important;
 }}
 
 /* Títulos de seção — minimalistas */
 [data-testid="stSidebar"] h3 {{
-  color: rgba(255,255,255,.55) !important;
-  font-size:.66rem !important; font-weight:700 !important;
-  text-transform: uppercase; letter-spacing:1.3px;
-  border: none; padding: 0; margin: 12px 0 4px 2px;
+  color: rgba(255,255,255,.6) !important;
+  font-size:.68rem !important; font-weight:700 !important;
+  text-transform: uppercase; letter-spacing:1.2px;
+  border: none; padding: 0; margin: 6px 0 2px 2px;
 }}
 
 /* Labels dos campos */
