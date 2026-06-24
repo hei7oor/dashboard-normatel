@@ -13,7 +13,7 @@ st.set_page_config(
     page_title="Normatel — Dashboard (BETA)",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 HOJE = pd.Timestamp(datetime.today().date())
@@ -56,10 +56,33 @@ st.markdown(f"""
 [data-testid="stAppViewContainer"] {{ background:{BG}; }}
 [data-testid="stHeader"] {{ background:transparent; }}
 
-/* ── Esconde label do botão recolher sidebar ──── */
-[data-testid="stSidebarCollapseButton"] span {{ display:none; }}
-[data-testid="stSidebarCollapseButton"] svg  {{ fill: white !important; }}
-button[kind="headerNoPadding"] {{ background:transparent !important; border:none; }}
+/* ── Esconde a sidebar completamente ──────────── */
+[data-testid="stSidebar"] {{ display:none !important; }}
+[data-testid="stSidebarCollapseButton"] {{ display:none !important; }}
+[data-testid="collapsedControl"] {{ display:none !important; }}
+
+/* ── BARRA DE FILTROS (topo) ──────────────────── */
+.filtros-wrap {{ margin-bottom: 2px; }}
+.flt-lbl {{
+  font-size:.66rem; font-weight:700; color:{G2};
+  letter-spacing:1px; margin:0 0 3px 2px; text-transform:uppercase;
+}}
+/* multiselect / select / input limpos no corpo */
+[data-baseweb="select"] > div {{
+  border-radius:9px !important; border:1px solid #e0e6e0 !important;
+  background:white !important; min-height:38px !important;
+  box-shadow:0 1px 3px rgba(0,0,0,.05);
+}}
+[data-baseweb="tag"] {{ background:{G3} !important; border-radius:14px !important; }}
+[data-baseweb="tag"] span {{ color:white !important; font-size:.72rem !important; }}
+[data-testid="stDateInput"] > div {{
+  border-radius:9px !important; border:1px solid #e0e6e0 !important;
+  box-shadow:0 1px 3px rgba(0,0,0,.05);
+}}
+[data-testid="stTextInput"] > div {{
+  border-radius:9px !important; border:1px solid #e0e6e0 !important;
+  box-shadow:0 1px 3px rgba(0,0,0,.05);
+}}
 
 /* ── SIDEBAR — moderna, compacta, fixa ───────── */
 [data-testid="stSidebar"] {{
@@ -457,104 +480,6 @@ else:
     dt_max = date.today()
 
 # ════════════════════════════════════════════════════════════════════════════
-# SIDEBAR — FILTROS INTELIGENTES (sem upload)
-# ════════════════════════════════════════════════════════════════════════════
-with st.sidebar:
-    # Cabeçalho compacto
-    st.markdown("""
-    <div style="display:flex;align-items:center;gap:8px;padding:6px 2px 12px">
-      <div style="font-size:1.15rem">⚙️</div>
-      <div style="font-size:.95rem;font-weight:800;color:white;letter-spacing:.5px">FILTROS</div>
-    </div>""", unsafe_allow_html=True)
-
-    # ── 1. Período ────────────────────────────────────────────────────────────
-    st.markdown("### 📅 Período")
-    periodo = st.date_input("", value=(dt_min, dt_max),
-                            min_value=dt_min, max_value=dt_max,
-                            format="DD/MM/YYYY",
-                            key="periodo_global", label_visibility="collapsed")
-    if len(periodo) == 2:
-        p_ini, p_fim = pd.Timestamp(periodo[0]), pd.Timestamp(periodo[1])
-    else:
-        p_ini, p_fim = pd.Timestamp(dt_min), pd.Timestamp(dt_max)
-
-    st.markdown("<hr>", unsafe_allow_html=True)
-
-    # ── 2. Base ───────────────────────────────────────────────────────────────
-    st.markdown("### 🏭 Bases")
-    bases_disp = sap_ok if sap_ok else ["UTGSUL","TIMS","UTGC"]
-    bases_sel  = st.multiselect("", bases_disp, default=bases_disp,
-                                placeholder="Todas as bases",
-                                key="bases_sel", label_visibility="collapsed")
-    if not bases_sel:
-        bases_sel = bases_disp   # se vazio → mostra todas
-
-    st.markdown("<hr>", unsafe_allow_html=True)
-
-    # ── 3. Fonte de dados ─────────────────────────────────────────────────────
-    st.markdown("### 📊 Fonte de Dados")
-    fonte = st.radio("", ["SAP + Produtivo","Apenas SAP","Apenas Produtivo"],
-                     key="fonte_sel", label_visibility="collapsed")
-    mostrar_sap  = fonte != "Apenas Produtivo"
-    mostrar_prod = fonte != "Apenas SAP"
-
-    st.markdown("<hr>", unsafe_allow_html=True)
-
-    # ── 4. Tipo de ordem (SAP) ────────────────────────────────────────────────
-    if mostrar_sap:
-        st.markdown("### 🔧 Tipo de Ordem")
-        tipos_ord = st.multiselect("", ["PREVENTIVAS","CORRETIVAS"],
-                                   default=["PREVENTIVAS","CORRETIVAS"],
-                                   placeholder="Todos os tipos",
-                                   key="tipos_ord", label_visibility="collapsed")
-        if not tipos_ord:
-            tipos_ord = ["PREVENTIVAS","CORRETIVAS"]
-
-        st.markdown("<hr>", unsafe_allow_html=True)
-
-    # ── 5. Status Produtivo ───────────────────────────────────────────────────
-    if mostrar_prod and prod_ok:
-        st.markdown("### ⚙️ Status das Atividades")
-        status_prod = st.multiselect("",
-                                     ["A realizar","Em andamento","Finalizada"],
-                                     default=["A realizar","Em andamento","Finalizada"],
-                                     placeholder="Todos os status",
-                                     key="status_prod", label_visibility="collapsed")
-        if not status_prod:
-            status_prod = ["A realizar","Em andamento","Finalizada"]
-
-        st.markdown("### 🛠️ Tipo de Serviço")
-        tipos_serv = sorted(PROD["_tipo_serv"].unique().tolist())
-        serv_sel = st.multiselect("", tipos_serv, default=tipos_serv,
-                                  placeholder="Todos os serviços",
-                                  key="serv_sel", label_visibility="collapsed")
-        if not serv_sel:
-            serv_sel = tipos_serv
-
-        st.markdown("<hr>", unsafe_allow_html=True)
-
-    # ── 6. Busca livre ────────────────────────────────────────────────────────
-    st.markdown("### 🔍 Busca Livre")
-    busca = st.text_input("", placeholder="Pesquisar serviço, local...",
-                          key="busca_geral", label_visibility="collapsed")
-
-    st.markdown("<hr>", unsafe_allow_html=True)
-
-    # ── Botão recarregar ──────────────────────────────────────────────────────
-    if st.button("🔄  Atualizar Dados"):
-        st.cache_data.clear()
-        st.rerun()
-
-    # Status de carga
-    if _log:
-        st.markdown("<hr>", unsafe_allow_html=True)
-        st.markdown("### ✅ Dados Carregados")
-        for nome, qtd, tipo in _log:
-            icone = "📋" if tipo == "sap" else "⚙️"
-            st.markdown(f"<small>{icone} <b>{nome}</b>: {qtd:,} registros</small>", unsafe_allow_html=True)
-
-
-# ════════════════════════════════════════════════════════════════════════════
 # HEADER PRINCIPAL
 # ════════════════════════════════════════════════════════════════════════════
 logo_src = LOGO_WHITE or LOGO_COLOR
@@ -572,11 +497,86 @@ st.markdown(f"""
     <span class="value">{CONTRATO}</span>
     <span class="label" style="margin-top:8px">Atualizado em</span>
     <span class="value">{HOJE.strftime('%d/%m/%Y')}</span>
-    <span class="label" style="margin-top:4px">Período filtrado</span>
-    <span class="value" style="font-size:.78rem">{p_ini.strftime('%d/%m/%y')} – {p_fim.strftime('%d/%m/%y')}</span>
   </div>
 </div>
 """, unsafe_allow_html=True)
+
+# ════════════════════════════════════════════════════════════════════════════
+# BARRA DE FILTROS — topo da página (sem sidebar verde)
+# ════════════════════════════════════════════════════════════════════════════
+with st.container():
+    st.markdown('<div class="filtros-wrap">', unsafe_allow_html=True)
+
+    f1, f2, f3, f4 = st.columns([1.4, 1.6, 1.1, 0.7])
+    with f1:
+        st.markdown('<div class="flt-lbl">📅 PERÍODO</div>', unsafe_allow_html=True)
+        periodo = st.date_input("p", value=(dt_min, dt_max),
+                                min_value=dt_min, max_value=dt_max,
+                                format="DD/MM/YYYY",
+                                key="periodo_global", label_visibility="collapsed")
+        if len(periodo) == 2:
+            p_ini, p_fim = pd.Timestamp(periodo[0]), pd.Timestamp(periodo[1])
+        else:
+            p_ini, p_fim = pd.Timestamp(dt_min), pd.Timestamp(dt_max)
+    with f2:
+        st.markdown('<div class="flt-lbl">🏭 BASES</div>', unsafe_allow_html=True)
+        bases_disp = sap_ok if sap_ok else ["UTGSUL","TIMS","UTGC"]
+        bases_sel  = st.multiselect("b", bases_disp, default=bases_disp,
+                                    placeholder="Todas as bases",
+                                    key="bases_sel", label_visibility="collapsed")
+        if not bases_sel:
+            bases_sel = bases_disp
+    with f3:
+        st.markdown('<div class="flt-lbl">📊 FONTE</div>', unsafe_allow_html=True)
+        fonte = st.selectbox("f", ["SAP + Produtivo","Apenas SAP","Apenas Produtivo"],
+                             key="fonte_sel", label_visibility="collapsed")
+    with f4:
+        st.markdown('<div class="flt-lbl">&nbsp;</div>', unsafe_allow_html=True)
+        if st.button("🔄 Atualizar", use_container_width=True):
+            st.cache_data.clear(); st.rerun()
+
+    mostrar_sap  = fonte != "Apenas Produtivo"
+    mostrar_prod = fonte != "Apenas SAP"
+
+    g1, g2, g3, g4 = st.columns([1.1, 1.3, 1.3, 1.4])
+    with g1:
+        st.markdown('<div class="flt-lbl">🔧 TIPO DE ORDEM</div>', unsafe_allow_html=True)
+        tipos_ord = st.multiselect("t", ["PREVENTIVAS","CORRETIVAS"],
+                                   default=["PREVENTIVAS","CORRETIVAS"],
+                                   placeholder="Todos", key="tipos_ord",
+                                   label_visibility="collapsed")
+        if not tipos_ord:
+            tipos_ord = ["PREVENTIVAS","CORRETIVAS"]
+    with g2:
+        st.markdown('<div class="flt-lbl">⚙️ STATUS</div>', unsafe_allow_html=True)
+        if prod_ok:
+            status_prod = st.multiselect("s", ["A realizar","Em andamento","Finalizada"],
+                                         default=["A realizar","Em andamento","Finalizada"],
+                                         placeholder="Todos", key="status_prod",
+                                         label_visibility="collapsed")
+            if not status_prod:
+                status_prod = ["A realizar","Em andamento","Finalizada"]
+        else:
+            status_prod = ["A realizar","Em andamento","Finalizada"]
+    with g3:
+        st.markdown('<div class="flt-lbl">🛠️ SERVIÇO</div>', unsafe_allow_html=True)
+        if prod_ok:
+            tipos_serv = sorted(PROD["_tipo_serv"].unique().tolist())
+            serv_sel = st.multiselect("sv", tipos_serv, default=tipos_serv,
+                                      placeholder="Todos", key="serv_sel",
+                                      label_visibility="collapsed")
+            if not serv_sel:
+                serv_sel = tipos_serv
+        else:
+            serv_sel = []
+    with g4:
+        st.markdown('<div class="flt-lbl">🔍 BUSCA LIVRE</div>', unsafe_allow_html=True)
+        busca = st.text_input("q", placeholder="Pesquisar serviço, local...",
+                              key="busca_geral", label_visibility="collapsed")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+st.markdown("")
 
 if not sap_ok and not prod_ok:
     st.error("Nenhum dado encontrado na pasta **dados/**. Adicione os arquivos Excel e clique em 🔄 Atualizar Dados.")
