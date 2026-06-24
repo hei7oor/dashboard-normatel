@@ -1,0 +1,31 @@
+============================================================
+  PASTA DE DADOS — Dashboard Planejamento Normatel
+============================================================
+
+Coloque aqui os arquivos Excel e o app carregará automaticamente.
+
+NOMES DOS ARQUIVOS (o nome precisa conter a palavra-chave):
+------------------------------------------------------------
+
+SAP — Ordens de Manutenção:
+  UTGSUL.xlsx   → planilha SAP da base UTGSUL
+  TIMS.xlsx     → planilha SAP da base TIMS
+  UTGC.xlsx     → planilha SAP da base UTGC
+
+Produtivo — Atividades de Campo:
+  REALIZAR.xlsx     → atividades com status "A realizar"
+  ANDAMENTO.xlsx    → atividades com status "Em andamento"
+  FINALIZADAS.xlsx  → atividades com status "Finalizada"
+
+REGRAS:
+  - O nome do arquivo pode ter outros textos, ex: "ORDENS TIMS.xlsx" funciona
+  - Formatos aceitos: .xlsx, .xls, .csv
+  - Após substituir um arquivo, clique em "🔄 Recarregar" no app
+
+COMO ATUALIZAR OS DADOS:
+  1. Exporte a nova planilha do SAP ou Produtivo
+  2. Substitua o arquivo antigo nesta pasta pelo novo
+  3. No app, clique em "🔄 Recarregar" na barra lateral
+  4. Os dados são atualizados instantaneamente
+
+============================================================

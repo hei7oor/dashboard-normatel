@@ -1,0 +1,15 @@
+# Segredos — NUNCA versionar a chave da API
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Sistema
+Thumbs.db
+.DS_Store
+
+# Backups temporários
+*.bak
+~$*
