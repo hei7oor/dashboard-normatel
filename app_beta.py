@@ -801,7 +801,7 @@ def get_sap_filtrado(bases=None):
 # ════════════════════════════════════════════════════════════════════════════
 # NAVEGAÇÃO: BASE
 # ════════════════════════════════════════════════════════════════════════════
-nav_opts = ["🌐 Visão Geral"] + (bases_sel if bases_sel else sap_ok) + ["📅 Agenda", "🔍 Detalhamento"]
+nav_opts = ["🌐 Visão Geral"] + (bases_sel if bases_sel else sap_ok) + ["🔍 Detalhamento"]
 base_nav = st.radio("", nav_opts, horizontal=True,
                     key="base_nav", label_visibility="collapsed")
 st.markdown("---")
@@ -902,65 +902,6 @@ if base_nav == "🌐 Visão Geral":
                             color_discrete_map=COR_BASE)
             graf_layout(fig_b2,320)
             st.plotly_chart(fig_b2,use_container_width=True)
-
-# ════════════════════════════════════════════════════════════════════════════
-# AGENDA DE ATIVIDADES
-# ════════════════════════════════════════════════════════════════════════════
-elif base_nav == "📅 Agenda":
-    st.markdown('<p class="sec-title">📅 Agenda de Atividades — Ordens Pendentes</p>', unsafe_allow_html=True)
-
-    df_ag = get_sap_filtrado()
-    if df_ag.empty or S_BASE not in df_ag.columns:
-        st.info("Nenhuma ordem disponível para montar a agenda.")
-    else:
-        # Apenas pendentes (sem data real de fim), ordenadas por prazo
-        pend = df_ag[df_ag[S_REAL].isna()].copy() if S_REAL in df_ag.columns else df_ag.copy()
-        pend = pend.dropna(subset=[S_BASE]).sort_values(S_BASE)
-
-        hoje = HOJE
-        fim_semana = hoje + pd.Timedelta(days=7)
-
-        atrasadas = pend[pend[S_BASE] < hoje]
-        semana    = pend[(pend[S_BASE] >= hoje) & (pend[S_BASE] <= fim_semana)]
-        futuras   = pend[pend[S_BASE] > fim_semana]
-
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("🔴 Atrasadas",     f"{len(atrasadas):,}")
-        k2.metric("🟡 Próximos 7 dias", f"{len(semana):,}")
-        k3.metric("🟢 Futuras",       f"{len(futuras):,}")
-        k4.metric("📋 Total pendente", f"{len(pend):,}")
-        st.markdown("---")
-
-        def _bloco_agenda(titulo, dados, cor, limite=30):
-            if dados.empty:
-                return
-            st.markdown(f'<div style="font-weight:700;color:{cor};font-size:1rem;margin:10px 0 6px">{titulo} ({len(dados)})</div>', unsafe_allow_html=True)
-            cards = ""
-            for _, r in dados.head(limite).iterrows():
-                ordem = r.get(S_ORDEM, "—")
-                texto = str(r.get(S_TEXTO, ""))[:70]
-                prazo = r[S_BASE].strftime("%d/%m/%Y") if pd.notna(r[S_BASE]) else "—"
-                bse   = r.get("_base", "")
-                tipo  = r.get("_tipo", "")
-                dias  = (r[S_BASE] - hoje).days if pd.notna(r[S_BASE]) else 0
-                dtxt  = f"{abs(dias)} dias em atraso" if dias < 0 else (f"vence hoje" if dias == 0 else f"em {dias} dias")
-                cards += (
-                    f'<div style="display:flex;align-items:center;gap:12px;background:white;border-left:4px solid {cor};'
-                    f'border-radius:8px;padding:8px 14px;margin:4px 0;box-shadow:0 1px 4px rgba(0,0,0,.06)">'
-                    f'<div style="font-weight:700;color:{G1};min-width:90px">#{ordem}</div>'
-                    f'<div style="flex:1;font-size:.84rem;color:#333">{texto}</div>'
-                    f'<div style="font-size:.74rem;color:#888;min-width:70px;text-align:center">{bse}</div>'
-                    f'<div style="font-size:.78rem;font-weight:600;color:{cor};min-width:90px;text-align:right">{prazo}</div>'
-                    f'<div style="font-size:.72rem;color:#999;min-width:110px;text-align:right">{dtxt}</div>'
-                    f'</div>'
-                )
-            st.markdown(cards, unsafe_allow_html=True)
-            if len(dados) > limite:
-                st.caption(f"+ {len(dados)-limite} ordens não exibidas (use os filtros para refinar)")
-
-        _bloco_agenda("🔴 ATRASADAS", atrasadas, "#C62828")
-        _bloco_agenda("🟡 PRÓXIMOS 7 DIAS", semana, "#F9A825")
-        _bloco_agenda("🟢 FUTURAS", futuras, G3, limite=20)
 
 # ════════════════════════════════════════════════════════════════════════════
 # DETALHAMENTO POR Nº DE ORDEM
