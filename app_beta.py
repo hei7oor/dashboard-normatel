@@ -2,7 +2,6 @@
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from google import genai as genai_sdk
 import json, io, base64, os, re, time
 from datetime import datetime, date
 
@@ -441,9 +440,6 @@ def carregar_todos():
 
 sap_data, prod_data, _log = carregar_todos()
 
-# ── Gemini key ───────────────────────────────────────────────────────────────
-try:    GEM_KEY = st.secrets["GEMINI_API_KEY"]
-except: GEM_KEY = ""
 if "chat"        not in st.session_state: st.session_state.chat = []
 if "chat_aberto" not in st.session_state: st.session_state.chat_aberto = False
 
