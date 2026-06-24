@@ -36,7 +36,7 @@ Este projeto tem **duas versões** que rodam independentes:
 git branch --show-current
 
 # Voltar para a versão estável (apresentação)
-git checkout main
+git checkout master
 
 # Ir para a versão beta
 git checkout beta
