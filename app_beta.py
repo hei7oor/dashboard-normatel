@@ -61,111 +61,137 @@ st.markdown(f"""
 [data-testid="stSidebarCollapseButton"] svg  {{ fill: white !important; }}
 button[kind="headerNoPadding"] {{ background:transparent !important; border:none; }}
 
-/* ── SIDEBAR — fundo verde ───────────────────── */
+/* ── SIDEBAR — moderna, compacta, fixa ───────── */
 [data-testid="stSidebar"] {{
-  background: linear-gradient(175deg, {G1} 0%, {G2} 50%, {G3} 100%);
-  box-shadow: 4px 0 24px rgba(0,0,0,.3);
+  background: linear-gradient(180deg, {G1} 0%, {G2} 100%);
+  box-shadow: 2px 0 18px rgba(0,0,0,.22);
+  border-right: 1px solid rgba(255,255,255,.08);
+}}
+/* compacta o espaçamento geral interno */
+[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{
+  padding-top: 12px !important;
+}}
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
+  gap: 0.35rem !important;
 }}
 
-/* Títulos de seção */
+/* Títulos de seção — minimalistas */
 [data-testid="stSidebar"] h3 {{
-  color: rgba(255,255,255,.95) !important;
-  font-size:.72rem !important; font-weight:700 !important;
-  text-transform: uppercase; letter-spacing:1px;
-  border-bottom: 1px solid rgba(255,255,255,.2);
-  padding-bottom: 5px; margin: 16px 0 8px;
+  color: rgba(255,255,255,.55) !important;
+  font-size:.66rem !important; font-weight:700 !important;
+  text-transform: uppercase; letter-spacing:1.3px;
+  border: none; padding: 0; margin: 12px 0 4px 2px;
 }}
 
 /* Labels dos campos */
 [data-testid="stSidebar"] label {{
-  color: rgba(255,255,255,.85) !important;
-  font-size:.8rem !important; font-weight:500 !important;
+  color: rgba(255,255,255,.8) !important;
+  font-size:.78rem !important; font-weight:500 !important;
 }}
 
-/* Divisores */
+/* Divisores — bem sutis */
 [data-testid="stSidebar"] hr {{
-  border-color: rgba(255,255,255,.15) !important; margin: 10px 0;
+  border-color: rgba(255,255,255,.1) !important; margin: 8px 0;
 }}
 
-/* ── Campos de input: fundo branco, texto escuro ── */
+/* ── Inputs: fundo branco translúcido, cantos suaves ── */
 [data-testid="stSidebar"] input {{
   background: white !important;
   color: {G1} !important;
-  border-radius: 8px !important;
-  font-size: .83rem !important;
+  border-radius: 9px !important;
+  font-size: .82rem !important;
 }}
 [data-testid="stSidebar"] [data-baseweb="select"] > div {{
   background: white !important;
-  border-radius: 8px !important;
+  border-radius: 9px !important;
   border: none !important;
+  min-height: 38px !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,.12);
 }}
 [data-testid="stSidebar"] [data-baseweb="select"] span,
 [data-testid="stSidebar"] [data-baseweb="select"] div {{
   color: {G1} !important;
-  font-size: .82rem !important;
+  font-size: .8rem !important;
 }}
 [data-testid="stSidebar"] [data-baseweb="tag"] {{
-  background: {G4} !important; border-radius:20px !important;
+  background: {G3} !important; border-radius:20px !important;
 }}
 [data-testid="stSidebar"] [data-baseweb="tag"] span {{
-  color: white !important; font-size:.75rem !important;
+  color: white !important; font-size:.72rem !important;
 }}
 
 /* Date input */
 [data-testid="stSidebar"] [data-testid="stDateInput"] > div {{
-  background: white !important; border-radius:8px !important;
+  background: white !important; border-radius:9px !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,.12);
 }}
 [data-testid="stSidebar"] [data-testid="stDateInput"] input {{
   color: {G1} !important;
 }}
 
-/* Radio buttons */
+/* Radio (Fonte de dados) — pílulas compactas */
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] {{
+  gap: 4px !important;
+}}
 [data-testid="stSidebar"] [data-testid="stRadio"] label {{
-  background: rgba(255,255,255,.12) !important;
-  border: 1px solid rgba(255,255,255,.25) !important;
-  border-radius: 8px !important; padding: 6px 12px !important;
-  color: white !important; font-size:.8rem !important;
-  margin-bottom: 4px; display:block; transition:.15s;
+  background: rgba(255,255,255,.08) !important;
+  border: 1px solid rgba(255,255,255,.18) !important;
+  border-radius: 9px !important; padding: 7px 12px !important;
+  color: white !important; font-size:.78rem !important;
+  margin: 0; display:flex; transition:.15s;
+}}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {{
+  background: rgba(255,255,255,.16) !important;
 }}
 [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {{
   background: white !important; color: {G2} !important;
   border-color: white !important; font-weight:700 !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
 }}
 [data-testid="stSidebar"] [data-testid="stRadio"] [data-testid="stMarkdownContainer"] p {{
-  color: inherit !important;
+  color: inherit !important; font-size:.78rem !important;
 }}
 
 /* Text input busca */
 [data-testid="stSidebar"] [data-testid="stTextInput"] > div {{
-  background: rgba(255,255,255,.15) !important;
-  border: 1px solid rgba(255,255,255,.3) !important;
-  border-radius: 8px !important;
+  background: rgba(255,255,255,.1) !important;
+  border: 1px solid rgba(255,255,255,.22) !important;
+  border-radius: 9px !important;
 }}
 [data-testid="stSidebar"] [data-testid="stTextInput"] input {{
   background: transparent !important;
   color: white !important;
 }}
 [data-testid="stSidebar"] [data-testid="stTextInput"] input::placeholder {{
-  color: rgba(255,255,255,.5) !important;
+  color: rgba(255,255,255,.45) !important;
 }}
 
 /* Botão recarregar */
 [data-testid="stSidebar"] .stButton>button {{
-  background: rgba(255,255,255,.15) !important;
+  background: rgba(255,255,255,.12) !important;
   color: white !important;
-  border: 1px solid rgba(255,255,255,.35) !important;
-  border-radius: 8px !important;
-  font-weight:600 !important; font-size:.8rem !important;
-  width:100%; transition:.2s; margin-top:4px;
+  border: 1px solid rgba(255,255,255,.28) !important;
+  border-radius: 9px !important;
+  font-weight:600 !important; font-size:.78rem !important;
+  width:100%; transition:.2s;
 }}
 [data-testid="stSidebar"] .stButton>button:hover {{
   background: white !important; color: {G2} !important;
 }}
 
+/* Expanders IA na sidebar — compactos */
+[data-testid="stSidebar"] [data-testid="stExpander"] {{
+  border: none !important; background: rgba(255,255,255,.06) !important;
+  border-radius: 8px !important; margin-bottom: 3px;
+}}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary {{
+  font-size:.76rem !important; color: white !important; padding: 6px 10px !important;
+}}
+
 /* Caption / small text na sidebar */
 [data-testid="stSidebar"] small,
 [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{
-  color: rgba(255,255,255,.65) !important; font-size:.75rem !important;
+  color: rgba(255,255,255,.6) !important; font-size:.73rem !important;
 }}
 
 /* ── HEADER FIXO NO TOPO ────────────────────────── */
@@ -437,18 +463,12 @@ else:
 # SIDEBAR — FILTROS INTELIGENTES (sem upload)
 # ════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
-    # Sidebar — só texto, sem imagem
+    # Cabeçalho compacto
     st.markdown("""
-    <div style="text-align:center; padding:28px 8px 16px;">
-      <div style="font-size:1.4rem; font-weight:900; color:white;
-                  letter-spacing:2px; line-height:1.1;">NORMATEL</div>
-      <div style="font-size:.78rem; color:rgba(255,255,255,.65);
-                  letter-spacing:3px; text-transform:uppercase; margin-top:3px;">Engenharia</div>
-      <div style="width:40px; height:3px; background:rgba(255,255,255,.3);
-                  border-radius:2px; margin:10px auto 0;"></div>
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 2px 12px">
+      <div style="font-size:1.15rem">⚙️</div>
+      <div style="font-size:.95rem;font-weight:800;color:white;letter-spacing:.5px">FILTROS</div>
     </div>""", unsafe_allow_html=True)
-
-    st.markdown("<hr>", unsafe_allow_html=True)
 
     # ── 1. Período ────────────────────────────────────────────────────────────
     st.markdown("### 📅 Período")
