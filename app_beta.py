@@ -35,6 +35,13 @@ ROXO= "#6A1B9A"   # roxo Produtivo
 
 COR_BASE = {"UTGSUL": AZ1, "TIMS": AZ2, "UTGC": AZ3}
 
+# ── Formato brasileiro de números (milhar com ponto, sem vírgula) ─────────────
+def fmt_br(x):
+    try:
+        return format(int(round(float(x))), ",d").replace(",", ".")
+    except Exception:
+        return str(x)
+
 # ── Logo ─────────────────────────────────────────────────────────────────────
 def logo_b64(path):
     if os.path.exists(path):
@@ -614,7 +621,7 @@ def kpis_sap(df):
         d2 = df.dropna(subset=[S_REAL,S_BASE])
         atr = int(((d2[S_REAL]-d2[S_BASE]).dt.days > 0).sum())
     else: atr = 0
-    pct = round((exec_-atr)/exec_*100,1) if exec_>0 else 0
+    pct = round((exec_-atr)/exec_*100) if exec_>0 else 0
     return dict(total=total,prev=prev,corr=corr,exec_=exec_,abert=abert,atraso=atr,pct=pct)
 
 def kpis_prod(df):
@@ -623,8 +630,8 @@ def kpis_prod(df):
     and_  = int((df[P_STATUS]=="Em andamento").sum()) if P_STATUS in df.columns else 0
     real  = int((df[P_STATUS]=="A realizar").sum()) if P_STATUS in df.columns else 0
     return dict(total=total, finalizadas=fin, and_=and_, real=real,
-                pct=round(fin/total*100,1) if total>0 else 0,
-                fin_perc=round(fin/total*100,1) if total>0 else 0,
+                pct=round(fin/total*100) if total>0 else 0,
+                fin_perc=round(fin/total*100) if total>0 else 0,
                 andamento=and_, realizar=real)
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -662,12 +669,12 @@ def _calcular_respostas_ia():
     for b in bases:
         d = r[b]
         tot_g += d.get("total", 0); exec_g += d.get("exec_", 0); abert_g += d.get("abert", 0)
-        linhas.append(f"**{b}** — {d.get('total',0):,} ordens · {d.get('exec_',0):,} executadas ({_execp(b):.0f}%) · {d.get('abert',0):,} abertas")
+        linhas.append(f"**{b}** — {fmt_br(d.get('total',0))} ordens · {fmt_br(d.get('exec_',0))} executadas ({_execp(b):.0f}%) · {fmt_br(d.get('abert',0))} abertas")
     if linhas:
         ep = (exec_g/tot_g*100) if tot_g else 0
-        cab = f"📊 **{tot_g:,} ordens** no período · **{exec_g:,} executadas ({ep:.0f}%)** · **{abert_g:,} em aberto**"
+        cab = f"📊 **{fmt_br(tot_g)} ordens** no período · **{fmt_br(exec_g)} executadas ({ep:.0f}%)** · **{fmt_br(abert_g)} em aberto**"
         corpo = "\n\n".join(linhas)
-        rodape = f"\n\n⚙️ **Produtivo:** {prod_r.get('total',0):,} atividades, {prod_r.get('finalizadas',0):,} finalizadas ({prod_r.get('fin_perc',0):.0f}%)" if prod_r else ""
+        rodape = f"\n\n⚙️ **Produtivo:** {fmt_br(prod_r.get('total',0))} atividades, {fmt_br(prod_r.get('finalizadas',0))} finalizadas ({prod_r.get('fin_perc',0):.0f}%)" if prod_r else ""
         respostas[0] = f"{cab}\n\n{corpo}{rodape}"
     else:
         respostas[0] = "Sem dados SAP no período selecionado."
@@ -678,9 +685,9 @@ def _calcular_respostas_ia():
     for b in bases:
         at = r[b].get("atrasadas", 0); ab = r[b].get("abert", 0); tot_at += at
         alerta = "🔴" if at > 0 else "🟢"
-        linhas.append(f"{alerta} **{b}** — {ab:,} ordens em aberto, **{at:,} já vencidas**")
+        linhas.append(f"{alerta} **{b}** — {fmt_br(ab)} ordens em aberto, **{fmt_br(at)} já vencidas**")
     if linhas:
-        respostas[1] = f"⏰ **{tot_at:,} ordens vencidas** (prazo passou e não foram executadas):\n\n" + "\n\n".join(linhas)
+        respostas[1] = f"⏰ **{fmt_br(tot_at)} ordens vencidas** (prazo passou e não foram executadas):\n\n" + "\n\n".join(linhas)
     else:
         respostas[1] = "Sem dados SAP."
 
@@ -691,12 +698,12 @@ def _calcular_respostas_ia():
         prev = r[b].get("prev", 0); corr = r[b].get("corr", 0); tp += prev; tc += corr
         tot_pc = prev + corr
         perc_p = (prev/tot_pc*100) if tot_pc else 0
-        linhas.append(f"**{b}** — {prev:,} preventivas ({perc_p:.0f}%) · {corr:,} corretivas")
+        linhas.append(f"**{b}** — {fmt_br(prev)} preventivas ({perc_p:.0f}%) · {fmt_br(corr)} corretivas")
     if linhas:
         tt = tp + tc
         pp = (tp/tt*100) if tt else 0
         diag = "✅ Predomínio de preventivas (manutenção planejada — ideal)." if pp >= 50 else "⚠️ Corretivas em alta — atenção ao planejamento preventivo."
-        respostas[2] = f"🔧 **{tp:,} preventivas vs {tc:,} corretivas** ({pp:.0f}% preventivas)\n\n" + "\n\n".join(linhas) + f"\n\n{diag}"
+        respostas[2] = f"🔧 **{fmt_br(tp)} preventivas vs {fmt_br(tc)} corretivas** ({pp:.0f}% preventivas)\n\n" + "\n\n".join(linhas) + f"\n\n{diag}"
     else:
         respostas[2] = "Sem dados SAP."
 
@@ -707,7 +714,7 @@ def _calcular_respostas_ia():
         medalhas = ["🥇", "🥈", "🥉"]
         for i, b in enumerate(rank):
             m = medalhas[i] if i < 3 else "▪️"
-            linhas.append(f"{m} **{b}** — {_execp(b):.0f}% executado · {r[b].get('atrasadas',0):,} vencidas")
+            linhas.append(f"{m} **{b}** — {_execp(b):.0f}% executado · {fmt_br(r[b].get('atrasadas',0))} vencidas")
         respostas[3] = "🏆 **Ranking por % de execução:**\n\n" + "\n\n".join(linhas)
     else:
         respostas[3] = "Sem dados SAP."
@@ -717,10 +724,10 @@ def _calcular_respostas_ia():
         t = prod_r.get("total", 0)
         fin = prod_r.get("finalizadas", 0); an = prod_r.get("andamento", 0); re_ = prod_r.get("realizar", 0)
         pa = (an/t*100) if t else 0; pr_ = (re_/t*100) if t else 0
-        respostas[4] = (f"⚙️ **{t:,} atividades de campo:**\n\n"
-                        f"✅ **Finalizadas:** {fin:,} ({prod_r.get('fin_perc',0):.0f}%)\n\n"
-                        f"🔄 **Em andamento:** {an:,} ({pa:.0f}%)\n\n"
-                        f"📋 **A realizar:** {re_:,} ({pr_:.0f}%)")
+        respostas[4] = (f"⚙️ **{fmt_br(t)} atividades de campo:**\n\n"
+                        f"✅ **Finalizadas:** {fmt_br(fin)} ({prod_r.get('fin_perc',0):.0f}%)\n\n"
+                        f"🔄 **Em andamento:** {fmt_br(an)} ({pa:.0f}%)\n\n"
+                        f"📋 **A realizar:** {fmt_br(re_)} ({pr_:.0f}%)")
     else:
         respostas[4] = "Nenhum dado do Produtivo carregado."
 
@@ -842,7 +849,7 @@ def get_sap_filtrado(bases=None):
 # ════════════════════════════════════════════════════════════════════════════
 # NAVEGAÇÃO: BASE
 # ════════════════════════════════════════════════════════════════════════════
-nav_opts = ["🌐 Visão Geral"] + (bases_sel if bases_sel else sap_ok) + ["🔍 Detalhamento"]
+nav_opts = ["🌐 Visão Geral", "📅 Programação"] + (bases_sel if bases_sel else sap_ok) + ["🔍 Detalhamento"]
 base_nav = st.radio("", nav_opts, horizontal=True,
                     key="base_nav", label_visibility="collapsed")
 st.markdown("---")
@@ -859,13 +866,13 @@ if base_nav == "🌐 Visão Geral":
 
         st.markdown('<p class="sec-title">📋 SAP — Ordens de Manutenção</p>', unsafe_allow_html=True)
         c1,c2,c3,c4,c5,c6 = st.columns(6)
-        c1.metric("Total Ordens",   f"{kp.get('total',0):,}")
-        c2.metric("Preventivas",    f"{kp.get('prev',0):,}")
-        c3.metric("Corretivas",     f"{kp.get('corr',0):,}")
-        c4.metric("Executadas",     f"{kp.get('exec_',0):,}")
-        c5.metric("Abertas",        f"{kp.get('abert',0):,}")
+        c1.metric("Total Ordens",   f"{fmt_br(kp.get('total',0))}")
+        c2.metric("Preventivas",    f"{fmt_br(kp.get('prev',0))}")
+        c3.metric("Corretivas",     f"{fmt_br(kp.get('corr',0))}")
+        c4.metric("Executadas",     f"{fmt_br(kp.get('exec_',0))}")
+        c5.metric("Abertas",        f"{fmt_br(kp.get('abert',0))}")
         c6.metric("% No Prazo",     f"{kp.get('pct',0)}%",
-                  delta=f"-{kp.get('atraso',0)} atrasadas", delta_color="inverse")
+                  delta=f"-{fmt_br(kp.get('atraso',0))} atrasadas", delta_color="inverse")
 
         pg1,pg2,pg3 = st.columns(3)
         bases_v = [b for b in (bases_sel or sap_ok) if sap_data.get(b)]
@@ -905,10 +912,10 @@ if base_nav == "🌐 Visão Geral":
 
         st.markdown('<p class="sec-title">⚙️ Produtivo — Atividades de Campo</p>', unsafe_allow_html=True)
         p1,p2,p3,p4,p5 = st.columns(5)
-        p1.metric("Total Atividades", f"{kpp['total']:,}")
-        p2.metric("Finalizadas",      f"{kpp['finalizadas']:,}")
-        p3.metric("Em Andamento",     f"{kpp['and_']:,}")
-        p4.metric("A Realizar",       f"{kpp['real']:,}")
+        p1.metric("Total Atividades", f"{fmt_br(kpp['total'])}")
+        p2.metric("Finalizadas",      f"{fmt_br(kpp['finalizadas'])}")
+        p3.metric("Em Andamento",     f"{fmt_br(kpp['and_'])}")
+        p4.metric("A Realizar",       f"{fmt_br(kpp['real'])}")
         p5.metric("% Concluído",      f"{kpp['pct']}%")
 
         pp1,pp2,pp3 = st.columns(3)
@@ -945,6 +952,98 @@ if base_nav == "🌐 Visão Geral":
             st.plotly_chart(fig_b2,use_container_width=True)
 
 # ════════════════════════════════════════════════════════════════════════════
+# PROGRAMAÇÃO FUTURA — atividades do dia, Gantt e carga por semana
+# ════════════════════════════════════════════════════════════════════════════
+elif base_nav == "📅 Programação":
+    st.markdown('<p class="sec-title">📅 Programação de Atividades</p>', unsafe_allow_html=True)
+
+    dfp = get_sap_filtrado()
+    if dfp.empty or S_BASE not in dfp.columns:
+        st.info("Sem ordens para programar no filtro atual.")
+    else:
+        pend = dfp.copy()
+        if S_REAL in pend.columns:
+            pend = pend[pend[S_REAL].isna()]
+        pend = pend.dropna(subset=[S_BASE]).sort_values(S_BASE)
+
+        hoje = HOJE
+        d7   = hoje + pd.Timedelta(days=7)
+        d30  = hoje + pd.Timedelta(days=30)
+
+        atras_df = pend[pend[S_BASE] < hoje]
+        hoje_df  = pend[pend[S_BASE].dt.normalize() == hoje]
+        sem_df   = pend[(pend[S_BASE] >= hoje) & (pend[S_BASE] <= d7)]
+        mes_df   = pend[(pend[S_BASE] >= hoje) & (pend[S_BASE] <= d30)]
+
+        k1,k2,k3,k4 = st.columns(4)
+        k1.metric("🔴 Vencidas",          fmt_br(len(atras_df)))
+        k2.metric("📍 Para hoje",         fmt_br(len(hoje_df)))
+        k3.metric("🗓️ Próximos 7 dias",   fmt_br(len(sem_df)))
+        k4.metric("📦 Próximos 30 dias",  fmt_br(len(mes_df)))
+        st.markdown("---")
+
+        # ── Atividades de hoje ──────────────────────────────────────────────
+        st.markdown(f'<div style="font-weight:700;color:{G1};font-size:1rem;margin-bottom:6px">📍 Atividades de Hoje ({fmt_br(len(hoje_df))})</div>', unsafe_allow_html=True)
+        if hoje_df.empty:
+            st.caption("Nenhuma atividade com prazo para hoje.")
+        else:
+            cards = ""
+            for _, r in hoje_df.head(25).iterrows():
+                ordem = r.get(S_ORDEM, "—"); texto = str(r.get(S_TEXTO, ""))[:60]
+                bse = r.get("_base", ""); cor = COR_BASE.get(bse, G4)
+                cards += (
+                    f'<div style="display:flex;gap:12px;align-items:center;background:white;'
+                    f'border-left:4px solid {cor};border-radius:8px;padding:8px 14px;margin:4px 0;'
+                    f'box-shadow:0 1px 4px rgba(0,0,0,.06)">'
+                    f'<b style="color:{G1};min-width:90px">#{ordem}</b>'
+                    f'<span style="flex:1;font-size:.84rem;color:#333">{texto}</span>'
+                    f'<span style="font-size:.74rem;color:{cor};font-weight:700">{bse}</span></div>'
+                )
+            st.markdown(cards, unsafe_allow_html=True)
+        st.markdown("---")
+
+        # ── Cronograma (Gantt) — próximos 30 dias ───────────────────────────
+        st.markdown(f'<div style="font-weight:700;color:{G1};font-size:1rem;margin-bottom:6px">📊 Cronograma — próximas semanas</div>', unsafe_allow_html=True)
+        if mes_df.empty:
+            st.caption("Nada programado para os próximos 30 dias.")
+        else:
+            g = mes_df.head(40).copy()
+            ini = g[S_ENT].fillna(hoje) if S_ENT in g.columns else pd.Series([hoje]*len(g), index=g.index)
+            ini = ini.where(ini >= hoje, hoje)
+            fim = g[S_BASE]
+            ini = ini.where(ini < fim, fim - pd.Timedelta(days=1))
+            g["_ini"] = ini; g["_fim"] = fim
+            g["_lbl"] = "#" + g[S_ORDEM].astype(str) + " · " + g[S_TEXTO].astype(str).str.slice(0, 32)
+            figG = px.timeline(g, x_start="_ini", x_end="_fim", y="_lbl",
+                               color="_base", color_discrete_map=COR_BASE)
+            figG.update_yaxes(autorange="reversed", title="")
+            figG.update_xaxes(title="")
+            figG.add_vline(x=hoje, line_dash="dash", line_color=DR)
+            figG.update_layout(height=max(360, len(g)*24), plot_bgcolor="white",
+                               paper_bgcolor="rgba(0,0,0,0)", font_family="Inter",
+                               margin=dict(t=10,b=20,l=8,r=8),
+                               legend=dict(orientation="h",y=1.02,x=1,xanchor="right",title=""))
+            st.plotly_chart(figG, use_container_width=True)
+            st.caption("Linha tracejada vermelha = hoje. Mostrando até 40 ordens mais próximas.")
+        st.markdown("---")
+
+        # ── Carga por semana ────────────────────────────────────────────────
+        st.markdown(f'<div style="font-weight:700;color:{G1};font-size:1rem;margin-bottom:6px">🗓️ Carga de Trabalho por Semana</div>', unsafe_allow_html=True)
+        fut = pend[pend[S_BASE] >= hoje].copy()
+        if fut.empty:
+            st.caption("Sem programação futura no período filtrado.")
+        else:
+            fut["_sem"] = fut[S_BASE].dt.to_period("W").apply(lambda p: p.start_time)
+            dsem = fut.groupby(["_sem","_base"]).size().reset_index(name="Qtd")
+            dsem["Semana"] = "Sem " + dsem["_sem"].dt.strftime("%d/%m")
+            dsem = dsem.sort_values("_sem")
+            figS = px.bar(dsem, x="Semana", y="Qtd", color="_base",
+                          barmode="stack", text_auto=True, color_discrete_map=COR_BASE)
+            graf_layout(figS, 320)
+            figS.update_layout(legend_title="")
+            st.plotly_chart(figS, use_container_width=True)
+
+# ════════════════════════════════════════════════════════════════════════════
 # DETALHAMENTO POR Nº DE ORDEM
 # ════════════════════════════════════════════════════════════════════════════
 elif base_nav == "🔍 Detalhamento":
@@ -955,7 +1054,7 @@ elif base_nav == "🔍 Detalhamento":
     with cbusca:
         num = st.text_input("Buscar nº da ordem", placeholder="Ex: 12345678", key="busca_ordem")
     with cinfo:
-        st.markdown(f'<div style="padding-top:28px;color:#888;font-size:.82rem">{len(df_det):,} ordens no filtro atual</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="padding-top:28px;color:#888;font-size:.82rem">{fmt_br(len(df_det))} ordens no filtro atual</div>', unsafe_allow_html=True)
 
     if df_det.empty:
         st.info("Nenhuma ordem disponível.")
@@ -964,7 +1063,7 @@ elif base_nav == "🔍 Detalhamento":
         if num.strip():
             res = res[res[S_ORDEM].astype(str).str.contains(num.strip(), na=False)]
 
-        st.caption(f"{len(res):,} resultado(s)")
+        st.caption(f"{fmt_br(len(res))} resultado(s)")
         for _, r in res.head(40).iterrows():
             ordem  = r.get(S_ORDEM, "—")
             texto  = str(r.get(S_TEXTO, "—"))
@@ -1022,13 +1121,13 @@ else:
             kp   = kpis_sap(df_s) if not df_s.empty else {}
 
             c1,c2,c3,c4,c5,c6 = st.columns(6)
-            c1.metric("Total",       f"{kp.get('total',0):,}")
-            c2.metric("Preventivas", f"{kp.get('prev',0):,}")
-            c3.metric("Corretivas",  f"{kp.get('corr',0):,}")
-            c4.metric("Executadas",  f"{kp.get('exec_',0):,}")
-            c5.metric("Abertas",     f"{kp.get('abert',0):,}")
+            c1.metric("Total",       f"{fmt_br(kp.get('total',0))}")
+            c2.metric("Preventivas", f"{fmt_br(kp.get('prev',0))}")
+            c3.metric("Corretivas",  f"{fmt_br(kp.get('corr',0))}")
+            c4.metric("Executadas",  f"{fmt_br(kp.get('exec_',0))}")
+            c5.metric("Abertas",     f"{fmt_br(kp.get('abert',0))}")
             c6.metric("% No Prazo",  f"{kp.get('pct',0)}%",
-                      delta=f"-{kp.get('atraso',0)} atrasadas", delta_color="inverse")
+                      delta=f"-{fmt_br(kp.get('atraso',0))} atrasadas", delta_color="inverse")
 
             st.markdown('<p class="sec-title">Distribuição</p>', unsafe_allow_html=True)
             g1,g2,g3 = st.columns(3)
@@ -1065,7 +1164,7 @@ else:
                 fig_t.update_layout(yaxis={"categoryorder":"total ascending"})
                 st.plotly_chart(fig_t,use_container_width=True)
 
-            with st.expander(f"📋 Ver tabela completa ({len(df_s):,} ordens)"):
+            with st.expander(f"📋 Ver tabela completa ({fmt_br(len(df_s))} ordens)"):
                 st.dataframe(df_s.drop(columns=["_tipo","_base"],errors="ignore"),
                              use_container_width=True, height=360)
                 c1,c2 = st.columns(2)
@@ -1084,10 +1183,10 @@ else:
                 st.warning(f"Nenhuma atividade Produtivo para **{base}** com os filtros atuais.")
             else:
                 p1,p2,p3,p4,p5 = st.columns(5)
-                p1.metric("Total",       f"{kpp['total']:,}")
-                p2.metric("Finalizadas", f"{kpp['finalizadas']:,}")
-                p3.metric("Andamento",   f"{kpp['and_']:,}")
-                p4.metric("A Realizar",  f"{kpp['real']:,}")
+                p1.metric("Total",       f"{fmt_br(kpp['total'])}")
+                p2.metric("Finalizadas", f"{fmt_br(kpp['finalizadas'])}")
+                p3.metric("Andamento",   f"{fmt_br(kpp['and_'])}")
+                p4.metric("A Realizar",  f"{fmt_br(kpp['real'])}")
                 p5.metric("% Concluído", f"{kpp['pct']}%")
 
                 st.markdown('<p class="sec-title">Distribuição</p>', unsafe_allow_html=True)
@@ -1122,7 +1221,7 @@ else:
                     graf_layout(fig_p,320)
                     st.plotly_chart(fig_p,use_container_width=True)
 
-                with st.expander(f"📋 Tabela ({len(df_p):,} atividades)"):
+                with st.expander(f"📋 Tabela ({fmt_br(len(df_p))} atividades)"):
                     cols_v = [c for c in [P_TITULO,P_LOCAL,P_STATUS,P_DT_INI,P_DT_FIM,P_FIN,"_tipo_serv"] if c in df_p.columns]
                     st.dataframe(df_p[cols_v], use_container_width=True, height=360)
                     c1,c2 = st.columns(2)
