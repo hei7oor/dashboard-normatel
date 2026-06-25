@@ -924,8 +924,7 @@ if base_nav == "🌐 Visão Geral":
         c3.metric("Corretivas",     f"{fmt_br(kp.get('corr',0))}")
         c4.metric("Executadas",     f"{fmt_br(kp.get('exec_',0))}")
         c5.metric("Abertas",        f"{fmt_br(kp.get('abert',0))}")
-        c6.metric("% No Prazo",     f"{kp.get('pct',0)}%",
-                  delta=f"-{fmt_br(kp.get('atraso',0))} atrasadas", delta_color="inverse")
+        c6.metric("% No Prazo",     f"{kp.get('pct',0)}%")
 
         pg1,pg2,pg3 = st.columns(3)
         bases_v = [b for b in (bases_sel or sap_ok) if tem_sap(b)]
@@ -937,9 +936,9 @@ if base_nav == "🌐 Visão Geral":
             st.plotly_chart(pizza(["Preventivas","Corretivas"],[kp.get("prev",0),kp.get("corr",0)],
                 [G4,AZ2],"Tipo de Ordem"), use_container_width=True)
         with pg3:
-            ex=kp.get("exec_",0); atr=kp.get("atraso",0)
-            st.plotly_chart(pizza(["No Prazo","Atrasadas"],[ex-atr,atr],
-                [G4,DR],"Pontualidade"), use_container_width=True)
+            ex=kp.get("exec_",0); ab=kp.get("abert",0)
+            st.plotly_chart(pizza(["Executadas","Abertas"],[ex,ab],
+                [G4,G5],"Execução"), use_container_width=True)
 
         # Curva S consolidada SAP
         st.markdown('<p class="sec-title">Curva S — Planejado × Executado (SAP)</p>', unsafe_allow_html=True)
@@ -1255,15 +1254,21 @@ else:
             c3.metric("Corretivas",  f"{fmt_br(kp.get('corr',0))}")
             c4.metric("Executadas",  f"{fmt_br(kp.get('exec_',0))}")
             c5.metric("Abertas",     f"{fmt_br(kp.get('abert',0))}")
-            c6.metric("% No Prazo",  f"{kp.get('pct',0)}%",
-                      delta=f"-{fmt_br(kp.get('atraso',0))} atrasadas", delta_color="inverse")
+            c6.metric("% No Prazo",  f"{kp.get('pct',0)}%")
 
             st.markdown('<p class="sec-title">Distribuição</p>', unsafe_allow_html=True)
             g1,g2,g3 = st.columns(3)
             with g1: st.plotly_chart(pizza(["Preventivas","Corretivas"],
                 [kp.get("prev",0),kp.get("corr",0)],[cor,AZ2],"Tipo"), use_container_width=True)
-            ex=kp.get("exec_",0); atr=kp.get("atraso",0)
-            with g2: st.plotly_chart(pizza(["No Prazo","Atrasadas"],[ex-atr,atr],[G4,DR],"Pontualidade"), use_container_width=True)
+            ex=kp.get("exec_",0)
+            with g2:
+                if S_ABC in df_s.columns and not df_s.empty:
+                    dabc = df_s[S_ABC].value_counts()
+                    ordem_abc = [x for x in ["A","B","C","Sem classif."] if x in dabc.index]
+                    dabc = dabc.reindex(ordem_abc)
+                    cores = {"A":DR,"B":AM,"C":G4,"Sem classif.":"#BDBDBD"}
+                    st.plotly_chart(pizza(list(dabc.index), list(dabc.values),
+                        [cores.get(x,"#BDBDBD") for x in dabc.index], "Criticidade"), use_container_width=True)
             with g3: st.plotly_chart(pizza(["Executadas","Abertas"],[ex,kp.get("abert",0)],[cor,"#BDBDBD"],"Execução"), use_container_width=True)
 
             # Curva S
