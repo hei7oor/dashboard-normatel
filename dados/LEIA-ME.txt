@@ -2,30 +2,29 @@
   PASTA DE DADOS — Dashboard Planejamento Normatel
 ============================================================
 
-Coloque aqui os arquivos Excel e o app carregará automaticamente.
+Coloque aqui os arquivos Excel e o app carrega automaticamente.
 
-NOMES DOS ARQUIVOS (o nome precisa conter a palavra-chave):
 ------------------------------------------------------------
-
-SAP — Ordens de Manutenção:
-  UTGSUL.xlsx   → planilha SAP da base UTGSUL
-  TIMS.xlsx     → planilha SAP da base TIMS
-  UTGC.xlsx     → planilha SAP da base UTGC
+SAP — Ordens de Manutenção (1 arquivo, 1 aba por base):
+  SAP.xlsx  ->  abas: UTGC, UTGSUL, TIMS
+     Colunas usadas: ordem, codigo ABC, Status do sistema,
+     Texto breve, Data entr., Data-base fim, Data real do fim,
+     GPM (disciplina), CenTrabPr., Local de instalacao, pln.manut.
+     (pln.manut. preenchido = PREVENTIVA, vazio = CORRETIVA)
 
 Produtivo — Atividades de Campo:
-  REALIZAR.xlsx     → atividades com status "A realizar"
-  ANDAMENTO.xlsx    → atividades com status "Em andamento"
-  FINALIZADAS.xlsx  → atividades com status "Finalizada"
+  REALIZAR.xlsx     -> status "A realizar"
+  ANDAMENTO.xlsx    -> status "Em andamento"
+  FINALIZADAS.xlsx  -> status "Finalizada"
+
+------------------------------------------------------------
+COMO ATUALIZAR:
+  1. Exporte a planilha nova do SAP (ou Produtivo)
+  2. Substitua o arquivo nesta pasta (mesmo nome)
+  3. No app, clique em "Atualizar" (ou Reboot no Streamlit Cloud)
 
 REGRAS:
-  - O nome do arquivo pode ter outros textos, ex: "ORDENS TIMS.xlsx" funciona
+  - O nome do arquivo SAP precisa conter "SAP"
+  - Datas no formato DD.MM.AAAA
   - Formatos aceitos: .xlsx, .xls, .csv
-  - Após substituir um arquivo, clique em "🔄 Recarregar" no app
-
-COMO ATUALIZAR OS DADOS:
-  1. Exporte a nova planilha do SAP ou Produtivo
-  2. Substitua o arquivo antigo nesta pasta pelo novo
-  3. No app, clique em "🔄 Recarregar" na barra lateral
-  4. Os dados são atualizados instantaneamente
-
 ============================================================

@@ -358,8 +358,11 @@ div[data-testid="stHorizontalBlock"] > div:nth-child(2) > div[data-testid="stVer
 BASES_SAP = ["UTGSUL","TIMS","UTGC"]
 PASTA     = "dados"
 
+# Nomes canônicos internos das colunas SAP (mapeados do Excel real)
 S_ORDEM = "Ordem";  S_STATUS = "Status sistema"; S_TEXTO = "Texto breve"
 S_ENT   = "Data de entrada"; S_BASE = "Data-base fim"; S_REAL = "Dt.real fim"
+S_ABC   = "Criticidade"; S_GPM = "Disciplina"; S_CENTRO = "Centro de Trabalho"
+S_LOCAL = "Local de instalação"; S_PLANO = "Plano manut."; S_STATUSUSR = "Status usuário"
 
 P_TITULO = "Título"; P_STATUS = "Status"; P_LOCAL = "Cliente ou Local"
 P_CRIADA = "Quando foi criada"; P_INIC = "Quando foi iniciada"
@@ -367,16 +370,19 @@ P_FIN    = "Quando foi finalizada"; P_DT_FIM = "Data e hora final"
 P_DT_INI = "Data e hora inicial"; P_FORM = "Formulário"
 
 MAPA = {
-    "sap": {
-        "UTGSUL": ["UTGSUL","utgsul"],
-        "TIMS":   ["TIMS","tims"],
-        "UTGC":   ["UTGC","utgc"],
-    },
+    "sap": ["SAP"],   # arquivo único com 1 aba por base
     "prod": {
         "realizar":    ["REALIZAR","A REALIZAR"],
         "andamento":   ["ANDAMENTO","EM ANDAMENTO"],
         "finalizadas": ["FINALIZADAS","FINALIZADA"],
     }
+}
+
+# nomes ABC e disciplinas amigáveis
+DISCIPLINA_NOME = {
+    "REF":"Refrigeração","CIV":"Civil","ELE":"Elétrica","MEC":"Mecânica",
+    "SOP":"Sopro/Utilidades","COM":"Comunicação","CAL":"Caldeiraria",
+    "AUT":"Automação","INS":"Instrumentação","INST":"Instrumentação",
 }
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -390,19 +396,62 @@ def encontrar_arquivo(pasta, padroes):
             return os.path.join(pasta, arq)
     return None
 
+def _achar_col(cols, *chaves):
+    """Encontra a coluna cujo nome (minúsculo) contém todas as chaves."""
+    for c in cols:
+        cl = str(c).lower()
+        if all(k in cl for k in chaves):
+            return c
+    return None
+
 @st.cache_data(show_spinner=False)
 def ler_sap(caminho):
+    """Lê SAP.xlsx — cada aba é uma base. Mapeia colunas e deriva tipo."""
     xl = pd.ExcelFile(caminho, engine="openpyxl")
     resultado = {}
     for aba in xl.sheet_names:
         df = xl.parse(aba)
         df.columns = [str(c).strip() for c in df.columns]
+        cols = list(df.columns)
+        mapa = {
+            _achar_col(cols, "ordem"):        S_ORDEM,
+            _achar_col(cols, "status", "sis"): S_STATUS,
+            _achar_col(cols, "status", "u"):   S_STATUSUSR,
+            _achar_col(cols, "texto"):         S_TEXTO,
+            _achar_col(cols, "entr"):          S_ENT,
+            _achar_col(cols, "base", "fim"):   S_BASE,
+            _achar_col(cols, "real"):          S_REAL,
+            _achar_col(cols, "abc"):           S_ABC,
+            _achar_col(cols, "gpm"):           S_GPM,
+            _achar_col(cols, "centrab"):       S_CENTRO,
+            _achar_col(cols, "local"):         S_LOCAL,
+            _achar_col(cols, "pln"):           S_PLANO,
+        }
+        ren = {orig: canon for orig, canon in mapa.items() if orig and orig in df.columns}
+        df = df.rename(columns=ren)
         df = df.dropna(how="all")
-        if df.empty or S_ORDEM not in df.columns: continue
+        if S_ORDEM not in df.columns:
+            continue
+        # datas no formato DD.MM.AAAA
         for col in [S_ENT, S_BASE, S_REAL]:
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], dayfirst=True, errors="coerce")
-        resultado[aba] = df
+        # tipo: com plano de manutenção = PREVENTIVA, senão CORRETIVA
+        if S_PLANO in df.columns:
+            tem = (df[S_PLANO].notna()
+                   & (df[S_PLANO].astype(str).str.strip().str.lower() != "nan")
+                   & (df[S_PLANO].astype(str).str.strip() != ""))
+            df["_tipo"] = tem.map({True: "PREVENTIVA", False: "CORRETIVA"})
+        else:
+            df["_tipo"] = "CORRETIVA"
+        # criticidade limpa
+        if S_ABC in df.columns:
+            df[S_ABC] = df[S_ABC].astype(str).str.strip().str.upper().replace({"NAN": "Sem classif."})
+        # disciplina amigável
+        if S_GPM in df.columns:
+            df["_disc"] = df[S_GPM].astype(str).str.strip().str.upper().map(
+                lambda x: DISCIPLINA_NOME.get(x, x if x and x != "NAN" else "Outros"))
+        resultado[aba.upper().strip()] = df
     return resultado
 
 @st.cache_data(show_spinner=False)
@@ -422,19 +471,21 @@ def ler_produtivo(caminho):
 # ════════════════════════════════════════════════════════════════════════════
 @st.cache_data(show_spinner=False)
 def carregar_todos():
-    sap  = {b:{} for b in BASES_SAP}
+    sap  = {b: None for b in BASES_SAP}
     prod = {"realizar":None,"andamento":None,"finalizadas":None}
     log  = []
-    for base, padroes in MAPA["sap"].items():
-        c = encontrar_arquivo(PASTA, padroes)
-        if c:
-            try:
-                abas = ler_sap(c)
-                if abas:
-                    sap[base] = abas
-                    tot = sum(len(d) for d in abas.values())
-                    log.append((base, tot, "sap"))
-            except: pass
+    # SAP — arquivo único com 1 aba por base
+    c = encontrar_arquivo(PASTA, MAPA["sap"])
+    if c:
+        try:
+            abas = ler_sap(c)   # {BASE: df}
+            for base in BASES_SAP:
+                if base in abas and not abas[base].empty:
+                    sap[base] = abas[base]
+                    log.append((base, len(abas[base]), "sap"))
+        except Exception:
+            pass
+    # Produtivo
     for key, padroes in MAPA["prod"].items():
         c = encontrar_arquivo(PASTA, padroes)
         if c:
@@ -453,16 +504,18 @@ if "chat_aberto" not in st.session_state: st.session_state.chat_aberto = False
 # ════════════════════════════════════════════════════════════════════════════
 # DADOS COMBINADOS
 # ════════════════════════════════════════════════════════════════════════════
+def tem_sap(base):
+    df = sap_data.get(base)
+    return df is not None and not df.empty
+
 def sap_base(base):
-    frames = []
-    for aba, df in sap_data[base].items():
-        tmp = df.copy(); tmp["_tipo"] = aba.upper(); frames.append(tmp)
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    df = sap_data.get(base)
+    return df.copy() if df is not None else pd.DataFrame()
 
 prod_all_frames = [df for df in prod_data.values() if df is not None]
 PROD = pd.concat(prod_all_frames, ignore_index=True) if prod_all_frames else pd.DataFrame()
 
-sap_ok  = [b for b in BASES_SAP if sap_data[b]]
+sap_ok  = [b for b in BASES_SAP if tem_sap(b)]
 prod_ok = not PROD.empty
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -544,12 +597,12 @@ with st.container():
     g1, g2, g3, g4 = st.columns([1.1, 1.3, 1.3, 1.4])
     with g1:
         st.markdown('<div class="flt-lbl">🔧 TIPO DE ORDEM</div>', unsafe_allow_html=True)
-        tipos_ord = st.multiselect("t", ["PREVENTIVAS","CORRETIVAS"],
+        tipos_ord = st.multiselect("t", ["PREVENTIVA","CORRETIVA"],
                                    default=[],
                                    placeholder="Todos", key="tipos_ord",
                                    label_visibility="collapsed")
         if not tipos_ord:
-            tipos_ord = ["PREVENTIVAS","CORRETIVAS"]
+            tipos_ord = ["PREVENTIVA","CORRETIVA"]
     with g2:
         st.markdown('<div class="flt-lbl">⚙️ STATUS</div>', unsafe_allow_html=True)
         if prod_ok:
@@ -841,7 +894,7 @@ def curva_s(df_plan, col_plan, df_exec, col_exec, label_exec="Executado", h=370)
 def get_sap_filtrado(bases=None):
     frames=[]
     for b in (bases or bases_sel or sap_ok):
-        if not sap_data.get(b): continue
+        if not tem_sap(b): continue
         df = sap_base(b); df["_base"] = b
         frames.append(filtrar_sap(df))
     return pd.concat(frames,ignore_index=True) if frames else pd.DataFrame()
@@ -875,7 +928,7 @@ if base_nav == "🌐 Visão Geral":
                   delta=f"-{fmt_br(kp.get('atraso',0))} atrasadas", delta_color="inverse")
 
         pg1,pg2,pg3 = st.columns(3)
-        bases_v = [b for b in (bases_sel or sap_ok) if sap_data.get(b)]
+        bases_v = [b for b in (bases_sel or sap_ok) if tem_sap(b)]
         with pg1:
             vals=[len(filtrar_sap(sap_base(b))) for b in bases_v]
             st.plotly_chart(pizza(bases_v,vals,[COR_BASE.get(b,G4) for b in bases_v],
@@ -904,6 +957,38 @@ if base_nav == "🌐 Visão Geral":
                            color_discrete_map=COR_BASE)
             graf_layout(fig_b,340)
             st.plotly_chart(fig_b,use_container_width=True)
+
+        # ── Criticidade (ABC) e Disciplina ──────────────────────────────────
+        if not df_sap_all.empty and (S_ABC in df_sap_all.columns or "_disc" in df_sap_all.columns):
+            st.markdown('<p class="sec-title">Criticidade & Disciplina</p>', unsafe_allow_html=True)
+            ca, cb = st.columns(2)
+            with ca:
+                if S_ABC in df_sap_all.columns:
+                    cores_abc = {"A":DR,"B":AM,"C":G4,"Sem classif.":"#BDBDBD"}
+                    dabc = df_sap_all[S_ABC].value_counts()
+                    ordem_abc = [x for x in ["A","B","C","Sem classif."] if x in dabc.index]
+                    dabc = dabc.reindex(ordem_abc)
+                    figA = px.bar(x=dabc.index, y=dabc.values, color=dabc.index,
+                                  color_discrete_map=cores_abc,
+                                  text=[fmt_br(v) for v in dabc.values])
+                    figA.update_traces(textposition="outside")
+                    graf_layout(figA, 300)
+                    figA.update_layout(showlegend=False,
+                        title=dict(text="Ordens por Criticidade (A=crítico)",font=dict(size=12,color=G2),x=0.5))
+                    figA.update_xaxes(title=""); figA.update_yaxes(title="")
+                    st.plotly_chart(figA, use_container_width=True)
+            with cb:
+                if "_disc" in df_sap_all.columns:
+                    dd = df_sap_all["_disc"].value_counts().head(8).sort_values()
+                    figD = px.bar(x=dd.values, y=dd.index, orientation="h",
+                                  text=[fmt_br(v) for v in dd.values],
+                                  color_discrete_sequence=[G3])
+                    figD.update_traces(textposition="outside")
+                    graf_layout(figD, 300)
+                    figD.update_layout(showlegend=False,
+                        title=dict(text="Top Disciplinas",font=dict(size=12,color=G2),x=0.5))
+                    figD.update_xaxes(title=""); figD.update_yaxes(title="")
+                    st.plotly_chart(figD, use_container_width=True)
 
     # ── KPIs Produtivo ────────────────────────────────────────────────────────
     if mostrar_prod and prod_ok:
@@ -975,12 +1060,43 @@ elif base_nav == "📅 Programação":
         sem_df   = pend[(pend[S_BASE] >= hoje) & (pend[S_BASE] <= d7)]
         mes_df   = pend[(pend[S_BASE] >= hoje) & (pend[S_BASE] <= d30)]
 
-        k1,k2,k3,k4 = st.columns(4)
+        # críticas (A) vencidas — destaque para gestão
+        crit_venc = atras_df[atras_df[S_ABC] == "A"] if S_ABC in atras_df.columns else atras_df.iloc[0:0]
+
+        k1,k2,k3,k4,k5 = st.columns(5)
         k1.metric("🔴 Vencidas",          fmt_br(len(atras_df)))
-        k2.metric("📍 Para hoje",         fmt_br(len(hoje_df)))
-        k3.metric("🗓️ Próximos 7 dias",   fmt_br(len(sem_df)))
-        k4.metric("📦 Próximos 30 dias",  fmt_br(len(mes_df)))
+        k2.metric("🅰️ Críticas vencidas", fmt_br(len(crit_venc)))
+        k3.metric("📍 Para hoje",         fmt_br(len(hoje_df)))
+        k4.metric("🗓️ Próximos 7 dias",   fmt_br(len(sem_df)))
+        k5.metric("📦 Próximos 30 dias",  fmt_br(len(mes_df)))
         st.markdown("---")
+
+        ABC_COR = {"A":DR,"B":AM,"C":G4}
+        def _abc_tag(r):
+            a = str(r.get(S_ABC, "")) if S_ABC in r else ""
+            if a in ("A","B","C"):
+                return f'<span style="background:{ABC_COR[a]};color:white;padding:1px 7px;border-radius:10px;font-size:.66rem;font-weight:700">{a}</span>'
+            return ""
+
+        # ── Ordens críticas vencidas (prioridade máxima) ────────────────────
+        if not crit_venc.empty:
+            st.markdown(f'<div style="font-weight:700;color:{DR};font-size:1rem;margin-bottom:6px">🅰️ Ordens Críticas Vencidas — prioridade ({fmt_br(len(crit_venc))})</div>', unsafe_allow_html=True)
+            cards = ""
+            for _, r in crit_venc.sort_values(S_BASE).head(15).iterrows():
+                ordem = r.get(S_ORDEM,"—"); texto = str(r.get(S_TEXTO,""))[:55]
+                bse = r.get("_base",""); cor = COR_BASE.get(bse,G4)
+                prazo = r[S_BASE].strftime("%d/%m/%Y") if pd.notna(r[S_BASE]) else "—"
+                dias = (HOJE - r[S_BASE]).days if pd.notna(r[S_BASE]) else 0
+                cards += (
+                    f'<div style="display:flex;gap:12px;align-items:center;background:#FFF5F5;'
+                    f'border-left:4px solid {DR};border-radius:8px;padding:8px 14px;margin:4px 0">'
+                    f'<b style="color:{G1};min-width:90px">#{ordem}</b>'
+                    f'<span style="flex:1;font-size:.83rem;color:#333">{texto}</span>'
+                    f'<span style="font-size:.72rem;color:{cor};font-weight:700">{bse}</span>'
+                    f'<span style="font-size:.72rem;color:{DR};font-weight:700;min-width:110px;text-align:right">{fmt_br(dias)} dias atraso</span></div>'
+                )
+            st.markdown(cards, unsafe_allow_html=True)
+            st.markdown("---")
 
         # ── Atividades de hoje ──────────────────────────────────────────────
         st.markdown(f'<div style="font-weight:700;color:{G1};font-size:1rem;margin-bottom:6px">📍 Atividades de Hoje ({fmt_br(len(hoje_df))})</div>', unsafe_allow_html=True)
@@ -989,13 +1105,13 @@ elif base_nav == "📅 Programação":
         else:
             cards = ""
             for _, r in hoje_df.head(25).iterrows():
-                ordem = r.get(S_ORDEM, "—"); texto = str(r.get(S_TEXTO, ""))[:60]
+                ordem = r.get(S_ORDEM, "—"); texto = str(r.get(S_TEXTO, ""))[:55]
                 bse = r.get("_base", ""); cor = COR_BASE.get(bse, G4)
                 cards += (
-                    f'<div style="display:flex;gap:12px;align-items:center;background:white;'
+                    f'<div style="display:flex;gap:10px;align-items:center;background:white;'
                     f'border-left:4px solid {cor};border-radius:8px;padding:8px 14px;margin:4px 0;'
                     f'box-shadow:0 1px 4px rgba(0,0,0,.06)">'
-                    f'<b style="color:{G1};min-width:90px">#{ordem}</b>'
+                    f'<b style="color:{G1};min-width:90px">#{ordem}</b>{_abc_tag(r)}'
                     f'<span style="flex:1;font-size:.84rem;color:#333">{texto}</span>'
                     f'<span style="font-size:.74rem;color:{cor};font-weight:700">{bse}</span></div>'
                 )
@@ -1064,12 +1180,17 @@ elif base_nav == "🔍 Detalhamento":
             res = res[res[S_ORDEM].astype(str).str.contains(num.strip(), na=False)]
 
         st.caption(f"{fmt_br(len(res))} resultado(s)")
+        ABC_COR = {"A":DR,"B":AM,"C":G4}
         for _, r in res.head(40).iterrows():
             ordem  = r.get(S_ORDEM, "—")
             texto  = str(r.get(S_TEXTO, "—"))
             status = str(r.get(S_STATUS, "—"))
             bse    = r.get("_base", "—")
             tipo   = r.get("_tipo", "—")
+            abc    = str(r.get(S_ABC, "—")) if S_ABC in r else "—"
+            disc   = str(r.get("_disc", "—")) if "_disc" in r else "—"
+            centro = str(r.get(S_CENTRO, "—")) if S_CENTRO in r else "—"
+            local  = str(r.get(S_LOCAL, "—")) if S_LOCAL in r else "—"
             ent    = r[S_ENT].strftime("%d/%m/%Y")  if S_ENT in r and pd.notna(r[S_ENT])  else "—"
             plan   = r[S_BASE].strftime("%d/%m/%Y") if S_BASE in r and pd.notna(r[S_BASE]) else "—"
             real   = r[S_REAL].strftime("%d/%m/%Y") if S_REAL in r and pd.notna(r[S_REAL]) else "— (em aberto)"
@@ -1077,26 +1198,34 @@ elif base_nav == "🔍 Detalhamento":
             badge_c = G3 if concl else "#F9A825"
             badge_t = "✅ Executada" if concl else "⏳ Em aberto"
             cor_b   = COR_BASE.get(bse, G4)
+            cor_abc = ABC_COR.get(abc, "#BDBDBD")
+            abc_tag = (f'<span style="background:{cor_abc};color:white;padding:2px 9px;'
+                       f'border-radius:20px;font-size:.7rem;font-weight:700">Criticidade {abc}</span>') if abc not in ("—","nan") else ""
+            tipo_cor = G4 if "PREV" in str(tipo) else AZ2
             card = (
                 f'<div style="background:white;border-radius:12px;padding:16px 18px;margin:8px 0;'
                 f'box-shadow:0 2px 10px rgba(0,0,0,.08);border-top:3px solid {cor_b}">'
-                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px">'
                 f'<span style="font-size:1.1rem;font-weight:800;color:{G1}">Ordem #{ordem}</span>'
-                f'<span style="background:{badge_c};color:white;padding:3px 12px;border-radius:20px;font-size:.74rem;font-weight:600">{badge_t}</span>'
+                f'<span style="display:flex;gap:6px;align-items:center">{abc_tag}'
+                f'<span style="background:{badge_c};color:white;padding:3px 12px;border-radius:20px;font-size:.74rem;font-weight:600">{badge_t}</span></span>'
                 f'</div>'
                 f'<div style="font-size:.92rem;color:#333;margin-bottom:12px">{texto}</div>'
-                f'<div style="display:flex;flex-wrap:wrap;gap:18px;font-size:.78rem">'
+                f'<div style="display:flex;flex-wrap:wrap;gap:16px;font-size:.78rem">'
                 f'<div><span style="color:#999">Base:</span> <b style="color:{cor_b}">{bse}</b></div>'
-                f'<div><span style="color:#999">Tipo:</span> <b>{tipo}</b></div>'
-                f'<div><span style="color:#999">Status SAP:</span> <b>{status}</b></div>'
+                f'<div><span style="color:#999">Tipo:</span> <b style="color:{tipo_cor}">{tipo}</b></div>'
+                f'<div><span style="color:#999">Disciplina:</span> <b>{disc}</b></div>'
+                f'<div><span style="color:#999">Centro:</span> <b>{centro}</b></div>'
                 f'<div><span style="color:#999">Entrada:</span> <b>{ent}</b></div>'
                 f'<div><span style="color:#999">Prazo:</span> <b>{plan}</b></div>'
                 f'<div><span style="color:#999">Concluída:</span> <b>{real}</b></div>'
-                f'</div></div>'
+                f'</div>'
+                f'<div style="font-size:.72rem;color:#aaa;margin-top:8px">📍 {local}</div>'
+                f'</div>'
             )
             st.markdown(card, unsafe_allow_html=True)
         if len(res) > 40:
-            st.caption(f"+ {len(res)-40} ordens. Refine a busca pelo número.")
+            st.caption(f"+ {fmt_br(len(res)-40)} ordens. Refine a busca pelo número.")
 
 # ════════════════════════════════════════════════════════════════════════════
 # VISÃO POR BASE
@@ -1105,7 +1234,7 @@ else:
     base = base_nav
     cor  = COR_BASE.get(base, G4)
     tabs_list = []
-    if mostrar_sap and sap_data.get(base): tabs_list.append("📋 Ordens SAP")
+    if mostrar_sap and tem_sap(base): tabs_list.append("📋 Ordens SAP")
     if mostrar_prod and prod_ok:           tabs_list.append("⚙️ Atividades Produtivo")
 
     if not tabs_list:
