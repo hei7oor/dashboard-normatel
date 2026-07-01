@@ -1,4 +1,4 @@
-id_resposta,numero_sp,numero_ra,base,resposta_texto,respondido_por,data_hora_resposta,status_manual,email_enviado
-20260701-192652-RA-558/2025-SP-1,RA-558/2025-SP-1,RA-558/2025,UTGSUL,hwjkhsakjhasklf,asjkdhiuashdjkas,2026-07-01 19:26:52,Resposta registrada — aguardando lançamento oficial no SAMC,não
-20260701-192745-RA-197/2026-SP-1,RA-197/2026-SP-1,RA-197/2026,UTGSUL,hian,Robson,2026-07-01 19:27:45,Resposta registrada — aguardando lançamento oficial no SAMC,não
+id_resposta,numero_sp,numero_ra,base,resposta_texto,respondido_por,data_hora_resposta,status_manual,email_enviado,anexo_nome
+20260701-192652-RA-558/2025-SP-1,RA-558/2025-SP-1,RA-558/2025,UTGSUL,hwjkhsakjhasklf,asjkdhiuashdjkas,2026-07-01 19:26:52,Resposta registrada — aguardando lançamento oficial no SAMC,não,
+20260701-192745-RA-197/2026-SP-1,RA-197/2026-SP-1,RA-197/2026,UTGSUL,hian,Robson,2026-07-01 19:27:45,Resposta registrada — aguardando lançamento oficial no SAMC,não,
 20260701-201737-RA-308/2026-SP-1,RA-308/2026-SP-1,RA-308/2026,UTGC,TESTE,EDUARDO,2026-07-01 20:17:37,Resposta registrada — aguardando lançamento oficial no SAMC,não,

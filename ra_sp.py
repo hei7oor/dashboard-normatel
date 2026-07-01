@@ -123,7 +123,12 @@ def ler_respostas_manuais(caminho):
     """Lê dados/respostas_manuais.csv. Se não existir ainda, retorna DataFrame vazio com o schema certo."""
     if not caminho or not os.path.exists(caminho):
         return pd.DataFrame(columns=RESP_COLS)
-    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+    try:
+        df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+    except Exception:
+        # linha com número de campos diferente do cabeçalho (schema mudou entre commits) —
+        # não deixa a aba inteira quebrar, só ignora as linhas problemáticas.
+        df = pd.read_csv(caminho, dtype=str, keep_default_na=False, engine="python", on_bad_lines="skip")
     for col in RESP_COLS:
         if col not in df.columns:
             df[col] = ""

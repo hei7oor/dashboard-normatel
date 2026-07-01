@@ -4,6 +4,8 @@ sem precisar de `git` instalado nem de banco de dados externo. Usado para o CSV 
 respostas manuais e para o histórico diário de KPIs.
 """
 import base64
+import csv
+import io
 import time
 import requests
 
@@ -55,13 +57,21 @@ def gravar_linha_append(caminho_repo, colunas, nova_linha, mensagem, token,
         try:
             conteudo, sha = baixar_arquivo(caminho_repo, token, repo=repo, ref=ref)
             if conteudo is None:
-                cabecalho = ",".join(colunas)
-                conteudo = cabecalho + "\n"
-            linha_csv = ",".join(_csv_escapar(str(nova_linha.get(c, ""))) for c in colunas)
-            novo_conteudo = conteudo
-            if not novo_conteudo.endswith("\n"):
-                novo_conteudo += "\n"
-            novo_conteudo += linha_csv + "\n"
+                conteudo = None
+            else:
+                conteudo = _migrar_cabecalho(conteudo, colunas)
+
+            saida = io.StringIO(conteudo or "")
+            if conteudo is None:
+                escritor = csv.writer(saida, lineterminator="\n")
+                escritor.writerow(colunas)
+            else:
+                saida.seek(0, io.SEEK_END)
+                if saida.getvalue() and not saida.getvalue().endswith("\n"):
+                    saida.write("\n")
+                escritor = csv.writer(saida, lineterminator="\n")
+            escritor.writerow([str(nova_linha.get(c, "")) for c in colunas])
+            novo_conteudo = saida.getvalue()
 
             resp = _commit(caminho_repo, novo_conteudo, sha, mensagem, token, repo, ref)
             if resp.status_code in (200, 201):
@@ -77,7 +87,22 @@ def gravar_linha_append(caminho_repo, colunas, nova_linha, mensagem, token,
     return False, "Não foi possível gravar após múltiplas tentativas (conflito de commit)."
 
 
-def _csv_escapar(valor):
-    if any(c in valor for c in [",", '"', "\n"]):
-        return '"' + valor.replace('"', '""') + '"'
-    return valor
+def _migrar_cabecalho(conteudo, colunas):
+    """
+    Se o cabeçalho do CSV existente não bater com `colunas` (schema mudou desde o último
+    commit — ex: nova coluna adicionada), reescreve o cabeçalho e preenche as linhas
+    antigas com campo vazio nas colunas novas, para nunca ficar com linhas de tamanhos
+    diferentes do cabeçalho (isso já quebrou a leitura do CSV uma vez em produção).
+    """
+    linhas = list(csv.reader(io.StringIO(conteudo)))
+    if not linhas:
+        return None
+    if linhas[0] == list(colunas):
+        return conteudo
+    saida = io.StringIO()
+    escritor = csv.writer(saida, lineterminator="\n")
+    escritor.writerow(colunas)
+    for linha in linhas[1:]:
+        linha = (linha + [""] * len(colunas))[:len(colunas)]
+        escritor.writerow(linha)
+    return saida.getvalue()
