@@ -203,6 +203,34 @@ def combinar_status(df_sp, df_respostas, hoje=None):
     return d
 
 
+def anexar_data_abertura(df_sp, df_ra):
+    """
+    Anexa a coluna `_data_abertura` ao SP: data em que a SP foi registrada
+    (coluna `Registro SP` da RA-mãe) e, quando não disponível, cai para a
+    `Data de Criação` da RA-mãe. Usada nos filtros rápidos de período
+    (hoje / últimos N dias) na aba RA/SP.
+    """
+    d = df_sp.copy()
+    if df_ra is None or df_ra.empty or RA_NUMERO_SP not in df_ra.columns:
+        d["_data_abertura"] = pd.NaT
+        return d
+
+    mapa_sp = (df_ra.dropna(subset=[RA_NUMERO_SP])
+               .drop_duplicates(RA_NUMERO_SP, keep="last")
+               .set_index(RA_NUMERO_SP))
+    data_por_sp = mapa_sp[RA_REGISTRO_SP] if RA_REGISTRO_SP in mapa_sp.columns else pd.Series(dtype="datetime64[ns]")
+    d["_data_abertura"] = d[SP_NUMERO].map(data_por_sp)
+
+    if RA_NUMERO in df_ra.columns and RA_DT_CRIACAO in df_ra.columns and "_numero_ra" in d.columns:
+        mapa_ra = (df_ra.dropna(subset=[RA_NUMERO])
+                   .drop_duplicates(RA_NUMERO, keep="last")
+                   .set_index(RA_NUMERO))
+        data_por_ra = mapa_ra[RA_DT_CRIACAO]
+        faltando = d["_data_abertura"].isna()
+        d.loc[faltando, "_data_abertura"] = d.loc[faltando, "_numero_ra"].map(data_por_ra)
+    return d
+
+
 def kpis_ra_sp(df_ra, df_sp_status):
     """Totais gerais e por base, a partir do SP já combinado com combinar_status()."""
     def _bloco(df):

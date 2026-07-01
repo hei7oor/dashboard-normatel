@@ -8,6 +8,7 @@ from datetime import datetime, date
 import ra_sp
 from ra_sp import (
     SP_NUMERO, SP_STATUS, SP_LOCAL, SP_DESCRICAO, SP_PRAZO, SP_DATA_ATEND,
+    SP_CONTRATO, SP_STATUS_ATEND, SP_ELABORADO, SP_RESPOSTA, SP_EMISSOR, SP_DATA_RESPOSTA,
     RA_NUMERO, RA_DESCRICAO, RA_LOCAL,
     STATUS_RESPONDIDA, STATUS_AGUARDANDO, STATUS_SEM_RESPOSTA,
 )
@@ -358,6 +359,19 @@ div[data-testid="stHorizontalBlock"] > div:nth-child(2) > div[data-testid="stVer
 .badge-ok  {{ background:{G6}; color:{G1}; }}
 .badge-att {{ background:#FFF8E1; color:#E65100; }}
 .badge-err {{ background:#FFEBEE; color:#C62828; }}
+
+/* ── Uploader de anexo (popup Registrar resposta) — evita texto cortado/sobreposto ── */
+[data-testid="stFileUploaderDropzone"] {{
+  min-height: 84px !important;
+  padding: 14px 10px !important;
+  gap: 8px !important;
+}}
+[data-testid="stFileUploaderDropzoneInstructions"] span {{
+  white-space: normal !important;
+  text-overflow: clip !important;
+  overflow: visible !important;
+  line-height: 1.3 !important;
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -404,10 +418,15 @@ DISCIPLINA_NOME = {
 # ════════════════════════════════════════════════════════════════════════════
 # FUNÇÕES DE LEITURA
 # ════════════════════════════════════════════════════════════════════════════
+# arquivos gerados pelo próprio app (não são fonte de dados a ser localizada por padrão de nome)
+ARQUIVOS_INTERNOS = {"RESPOSTAS_MANUAIS.CSV", "HISTORICO_KPIS.CSV"}
+
 def encontrar_arquivo(pasta, padroes):
     if not os.path.isdir(pasta): return None
     for arq in os.listdir(pasta):
         nome = arq.upper()
+        if nome in ARQUIVOS_INTERNOS:
+            continue
         if any(p.upper() in nome for p in padroes) and arq.lower().endswith((".xlsx",".xls",".csv")):
             return os.path.join(pasta, arq)
     return None
@@ -1218,12 +1237,24 @@ elif base_nav == "📨 RA / SP":
         resp_sessao  = pd.DataFrame(st.session_state["respostas_sessao"])
         respostas    = pd.concat([resp_arquivo, resp_sessao], ignore_index=True) if not resp_sessao.empty else resp_arquivo
 
-        # ── filtra por base/período (reaproveita bases_sel / p_ini / p_fim globais) ──
+        # ── filtra por base (reaproveita bases_sel global) e anexa data de abertura ──
         sp_f = sp_df.copy()
         if SP_LOCAL in sp_f.columns and bases_sel:
             sp_f = sp_f[sp_f[SP_LOCAL].isin(bases_sel)]
-        if SP_PRAZO in sp_f.columns:
-            sp_f = sp_f[sp_f[SP_PRAZO].isna() | ((sp_f[SP_PRAZO] >= p_ini) & (sp_f[SP_PRAZO] <= p_fim))]
+        sp_f = ra_sp.anexar_data_abertura(sp_f, ra_df)
+
+        # ── filtro rápido de período (por data de abertura da SP) ──
+        PERIODOS_RASP = {
+            "Todo o período": None, "Hoje": 0, "Últimos 5 dias": 5,
+            "Últimos 15 dias": 15, "Último mês": 30,
+        }
+        periodo_rasp = st.radio(
+            "Abertas em", list(PERIODOS_RASP.keys()), index=0,
+            horizontal=True, key="rasp_periodo")
+        dias = PERIODOS_RASP[periodo_rasp]
+        if dias is not None:
+            limite = HOJE - pd.Timedelta(days=dias)
+            sp_f = sp_f[sp_f["_data_abertura"].isna() | (sp_f["_data_abertura"] >= limite)]
 
         ra_f = ra_df.copy()
         if not ra_f.empty and RA_LOCAL in ra_f.columns and bases_sel:
@@ -1335,23 +1366,63 @@ elif base_nav == "📨 RA / SP":
         if pend.empty:
             st.caption("Nada encontrado com os filtros atuais.")
         else:
+            STATUS_COR = {STATUS_SEM_RESPOSTA: DR, STATUS_AGUARDANDO: AM, STATUS_RESPONDIDA: G4}
             for _, r in pend.head(60).iterrows():
-                numero_sp = r.get(SP_NUMERO, "—")
-                base      = r.get(SP_LOCAL, "—")
-                cor       = COR_BASE.get(base, G4)
-                descricao = str(r.get(SP_DESCRICAO, ""))[:110]
-                prazo     = r[SP_PRAZO].strftime("%d/%m/%Y") if pd.notna(r.get(SP_PRAZO)) else "—"
-                status_f  = r.get("_status_final", "—")
-                atraso_badge = f'<span style="color:{DR};font-weight:700;font-size:.74rem">⏰ ATRASADA</span>' if r.get("_atrasada") else ""
+                numero_sp   = r.get(SP_NUMERO, "—")
+                numero_ra   = r.get("_numero_ra", "—")
+                base        = r.get(SP_LOCAL, "—")
+                cor         = COR_BASE.get(base, G4)
+                contrato    = r.get(SP_CONTRATO, "—")
+                descricao   = str(r.get(SP_DESCRICAO, "") or "—")
+                elaborado   = r.get(SP_ELABORADO, "—")
+                status_of   = r.get(SP_STATUS, "—")
+                status_at   = r.get(SP_STATUS_ATEND, "—")
+                abertura    = r["_data_abertura"].strftime("%d/%m/%Y") if pd.notna(r.get("_data_abertura")) else "—"
+                prazo       = r[SP_PRAZO].strftime("%d/%m/%Y") if pd.notna(r.get(SP_PRAZO)) else "—"
+                data_atend  = r[SP_DATA_ATEND].strftime("%d/%m/%Y") if pd.notna(r.get(SP_DATA_ATEND)) else "—"
+                status_f    = r.get("_status_final", "—")
+                cor_status  = STATUS_COR.get(status_f, "#999")
+                atraso_badge = f'<span style="background:{DR};color:white;padding:2px 9px;border-radius:20px;font-size:.68rem;font-weight:700">⏰ ATRASADA</span>' if r.get("_atrasada") else ""
+
+                resposta_html = ""
+                if status_f == STATUS_RESPONDIDA:
+                    resp_txt = str(r.get(SP_RESPOSTA, "") or "")
+                    emissor  = r.get(SP_EMISSOR, "—")
+                    dt_resp  = r[SP_DATA_RESPOSTA].strftime("%d/%m/%Y") if pd.notna(r.get(SP_DATA_RESPOSTA)) else "—"
+                    resposta_html = (
+                        f'<div style="background:#F1F8F2;border-left:3px solid {G4};border-radius:6px;'
+                        f'padding:8px 10px;margin-top:8px;font-size:.78rem;color:#333">'
+                        f'✅ <b>Respondida oficialmente</b> por {emissor} em {dt_resp}<br>{resp_txt}</div>')
+                elif status_f == STATUS_AGUARDANDO:
+                    resp_txt = str(r.get("_resposta_manual_texto") or "")
+                    por      = r.get("_resposta_manual_por", "—")
+                    quando   = r.get("_resposta_manual_quando", "—")
+                    resposta_html = (
+                        f'<div style="background:#FFF8E1;border-left:3px solid {AM};border-radius:6px;'
+                        f'padding:8px 10px;margin-top:8px;font-size:.78rem;color:#333">'
+                        f'💬 <b>Resposta registrada</b> por {por} em {quando} — aguardando lançamento no SAMC:<br>{resp_txt}</div>')
+
                 st.markdown(
-                    f'<div style="background:white;border-radius:10px;padding:10px 14px;margin:6px 0;'
+                    f'<div style="background:white;border-radius:10px;padding:12px 16px;margin:8px 0;'
                     f'box-shadow:0 1px 6px rgba(0,0,0,.07);border-left:4px solid {cor}">'
-                    f'<div style="display:flex;justify-content:space-between;gap:8px">'
-                    f'<b style="color:{G1}">{numero_sp}</b>'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'
+                    f'<span><b style="color:{G1};font-size:1rem">{numero_sp}</b> '
+                    f'<span style="color:#999;font-size:.78rem">({numero_ra})</span></span>'
+                    f'<span style="display:flex;gap:6px;align-items:center">'
                     f'<span style="font-size:.72rem;color:{cor};font-weight:700">{base}</span>'
-                    f'{atraso_badge}</div>'
-                    f'<div style="font-size:.84rem;color:#333;margin:4px 0">{descricao}</div>'
-                    f'<div style="font-size:.72rem;color:#999">Prazo: {prazo} &nbsp;·&nbsp; Status: {status_f}</div>'
+                    f'<span style="background:{cor_status};color:white;padding:2px 9px;border-radius:20px;font-size:.68rem;font-weight:700">{status_f}</span>'
+                    f'{atraso_badge}</span></div>'
+                    f'<div style="font-size:.86rem;color:#333;margin:6px 0">{descricao}</div>'
+                    f'<div style="display:flex;flex-wrap:wrap;gap:14px;font-size:.75rem;color:#666">'
+                    f'<div>Contrato: <b>{contrato}</b></div>'
+                    f'<div>Abertura: <b>{abertura}</b></div>'
+                    f'<div>Prazo: <b>{prazo}</b></div>'
+                    f'<div>Atendimento: <b>{data_atend}</b></div>'
+                    f'<div>Status oficial: <b>{status_of}</b></div>'
+                    f'<div>Situação: <b>{status_at}</b></div>'
+                    f'<div>Elaborado por: <b>{elaborado}</b></div>'
+                    f'</div>'
+                    f'{resposta_html}'
                     f'</div>', unsafe_allow_html=True)
                 if status_f != STATUS_RESPONDIDA:
                     if st.button("✍️ Responder", key=f"rasp_btn_{numero_sp}"):
