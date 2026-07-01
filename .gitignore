@@ -1,6 +1,9 @@
 # Segredos — NUNCA versionar a chave da API
 .streamlit/secrets.toml
 
+# Configuração local do Claude Code (não faz parte do app)
+.claude/
+
 # Python
 __pycache__/
 *.pyc

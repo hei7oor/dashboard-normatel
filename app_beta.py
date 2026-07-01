@@ -5,6 +5,15 @@ import plotly.graph_objects as go
 import json, io, base64, os, re, time
 from datetime import datetime, date
 
+import ra_sp
+from ra_sp import (
+    SP_NUMERO, SP_STATUS, SP_LOCAL, SP_DESCRICAO, SP_PRAZO, SP_DATA_ATEND,
+    RA_NUMERO, RA_DESCRICAO, RA_LOCAL,
+    STATUS_RESPONDIDA, STATUS_AGUARDANDO, STATUS_SEM_RESPOSTA,
+)
+from github_store import gravar_linha_append
+from email_utils import enviar_email
+
 # ════════════════════════════════════════════════════════════════════════════
 # CONFIGURAÇÃO
 # ════════════════════════════════════════════════════════════════════════════
@@ -375,8 +384,15 @@ MAPA = {
         "realizar":    ["REALIZAR","A REALIZAR"],
         "andamento":   ["ANDAMENTO","EM ANDAMENTO"],
         "finalizadas": ["FINALIZADAS","FINALIZADA"],
-    }
+    },
+    "ra": ["RA"],   # RA.xlsx — Relatório de Acompanhamento (SAMC Petrobras)
+    "sp": ["SP"],   # SP.xlsx — Solicitação de Providência (SAMC Petrobras)
 }
+
+CAMINHO_RESPOSTAS  = os.path.join(PASTA, "respostas_manuais.csv")
+CAMINHO_HISTORICO  = os.path.join(PASTA, "historico_kpis.csv")
+REPO_GITHUB        = "hei7oor/dashboard-normatel"
+EMAIL_HEITOR       = "heitor.fernandes@normatel.com.br"
 
 # nomes ABC e disciplinas amigáveis
 DISCIPLINA_NOME = {
@@ -470,6 +486,14 @@ def ler_produtivo(caminho):
 # AUTO-CARREGAMENTO (sem UI de upload)
 # ════════════════════════════════════════════════════════════════════════════
 @st.cache_data(show_spinner=False)
+def _ler_ra_cached(caminho):
+    return ra_sp.ler_ra(caminho)
+
+@st.cache_data(show_spinner=False)
+def _ler_sp_cached(caminho):
+    return ra_sp.ler_sp(caminho)
+
+@st.cache_data(show_spinner=False)
 def carregar_todos():
     sap  = {b: None for b in BASES_SAP}
     prod = {"realizar":None,"andamento":None,"finalizadas":None}
@@ -494,9 +518,25 @@ def carregar_todos():
                 prod[key] = df
                 log.append((key, len(df), "prod"))
             except: pass
-    return sap, prod, log
+    # RA / SP — SAMC Petrobras
+    ra_df, sp_df = pd.DataFrame(), pd.DataFrame()
+    c = encontrar_arquivo(PASTA, MAPA["ra"])
+    if c:
+        try:
+            ra_df = _ler_ra_cached(c)
+            log.append(("ra", len(ra_df), "ra"))
+        except Exception:
+            pass
+    c = encontrar_arquivo(PASTA, MAPA["sp"])
+    if c:
+        try:
+            sp_df = _ler_sp_cached(c)
+            log.append(("sp", len(sp_df), "sp"))
+        except Exception:
+            pass
+    return sap, prod, ra_df, sp_df, log
 
-sap_data, prod_data, _log = carregar_todos()
+sap_data, prod_data, ra_df, sp_df, _log = carregar_todos()
 
 if "chat"        not in st.session_state: st.session_state.chat = []
 if "chat_aberto" not in st.session_state: st.session_state.chat_aberto = False
@@ -527,6 +567,10 @@ for b in sap_ok:
     if S_BASE in df.columns: all_dates.extend(df[S_BASE].dropna().tolist())
 if prod_ok and P_DT_FIM in PROD.columns:
     all_dates.extend(PROD[P_DT_FIM].dropna().tolist())
+if not sp_df.empty and SP_PRAZO in sp_df.columns:
+    all_dates.extend(sp_df[SP_PRAZO].dropna().tolist())
+if not ra_df.empty and ra_sp.RA_DT_CRIACAO in ra_df.columns:
+    all_dates.extend(ra_df[ra_sp.RA_DT_CRIACAO].dropna().tolist())
 
 if all_dates:
     dt_min = pd.Timestamp(min(all_dates)).date()
@@ -902,7 +946,7 @@ def get_sap_filtrado(bases=None):
 # ════════════════════════════════════════════════════════════════════════════
 # NAVEGAÇÃO: BASE
 # ════════════════════════════════════════════════════════════════════════════
-nav_opts = ["🌐 Visão Geral", "📅 Programação"] + (bases_sel if bases_sel else sap_ok) + ["🔍 Detalhamento"]
+nav_opts = ["🌐 Visão Geral", "📅 Programação", "📨 RA / SP"] + (bases_sel if bases_sel else sap_ok) + ["🔍 Detalhamento"]
 base_nav = st.radio("", nav_opts, horizontal=True,
                     key="base_nav", label_visibility="collapsed")
 st.markdown("---")
@@ -1157,6 +1201,159 @@ elif base_nav == "📅 Programação":
             graf_layout(figS, 320)
             figS.update_layout(legend_title="")
             st.plotly_chart(figS, use_container_width=True)
+
+# ════════════════════════════════════════════════════════════════════════════
+# RA / SP — SAMC Petrobras
+# ════════════════════════════════════════════════════════════════════════════
+elif base_nav == "📨 RA / SP":
+    st.markdown('<p class="sec-title">📨 RA / SP — SAMC Petrobras</p>', unsafe_allow_html=True)
+
+    if sp_df.empty:
+        st.info("Nenhum arquivo **SP.xlsx** encontrado em `dados/`. Exporte o relatório do SAMC e adicione-o à pasta.")
+    else:
+        st.session_state.setdefault("respostas_sessao", [])
+
+        # ── carrega respostas manuais já registradas (arquivo + as desta sessão) ──
+        resp_arquivo = ra_sp.ler_respostas_manuais(CAMINHO_RESPOSTAS)
+        resp_sessao  = pd.DataFrame(st.session_state["respostas_sessao"])
+        respostas    = pd.concat([resp_arquivo, resp_sessao], ignore_index=True) if not resp_sessao.empty else resp_arquivo
+
+        # ── filtra por base/período (reaproveita bases_sel / p_ini / p_fim globais) ──
+        sp_f = sp_df.copy()
+        if SP_LOCAL in sp_f.columns and bases_sel:
+            sp_f = sp_f[sp_f[SP_LOCAL].isin(bases_sel)]
+        if SP_PRAZO in sp_f.columns:
+            sp_f = sp_f[sp_f[SP_PRAZO].isna() | ((sp_f[SP_PRAZO] >= p_ini) & (sp_f[SP_PRAZO] <= p_fim))]
+
+        ra_f = ra_df.copy()
+        if not ra_f.empty and RA_LOCAL in ra_f.columns and bases_sel:
+            ra_f = ra_f[ra_f[RA_LOCAL].isin(bases_sel)]
+
+        status_df = ra_sp.combinar_status(sp_f, respostas, hoje=HOJE)
+        geral, por_base = ra_sp.kpis_ra_sp(ra_f, status_df)
+
+        c1,c2,c3,c4,c5 = st.columns(5)
+        c1.metric("Total RA",         fmt_br(geral.get("total_ra",0)))
+        c2.metric("Total SP",         fmt_br(geral.get("total_sp",0)))
+        c3.metric("🔴 Sem resposta",  fmt_br(geral.get("sem_resposta",0)))
+        c4.metric("⏰ Atrasadas",     fmt_br(geral.get("atrasada",0)))
+        c5.metric("% Respondido",     f"{geral.get('pct_respondido',0)}%")
+
+        st.markdown('<p class="sec-title">Por base</p>', unsafe_allow_html=True)
+        bcols = st.columns(len(por_base) if por_base else 1)
+        for i, (base, kp) in enumerate(por_base.items()):
+            with bcols[i]:
+                st.markdown(
+                    f'<div style="background:white;border-radius:12px;padding:12px 14px;'
+                    f'box-shadow:0 2px 10px rgba(0,0,0,.08);border-top:3px solid {COR_BASE.get(base,G4)}">'
+                    f'<b style="color:{COR_BASE.get(base,G4)}">{base}</b>'
+                    f'<div style="font-size:.82rem;margin-top:6px">Total: <b>{fmt_br(kp["total_sp"])}</b></div>'
+                    f'<div style="font-size:.82rem;color:{DR}">Sem resposta: <b>{fmt_br(kp["sem_resposta"])}</b></div>'
+                    f'<div style="font-size:.82rem;color:{DR}">Atrasadas: <b>{fmt_br(kp["atrasada"])}</b></div>'
+                    f'<div style="font-size:.82rem">Respondido: <b>{kp["pct_respondido"]}%</b></div>'
+                    f'</div>', unsafe_allow_html=True)
+        st.markdown("---")
+
+        # ── filtro de status + busca ──
+        f1, f2 = st.columns([2, 2])
+        with f1:
+            status_sel = st.multiselect(
+                "Status", [STATUS_SEM_RESPOSTA, STATUS_AGUARDANDO, STATUS_RESPONDIDA],
+                default=[STATUS_SEM_RESPOSTA, STATUS_AGUARDANDO], key="rasp_status_sel")
+        with f2:
+            busca_sp = st.text_input("Buscar por número da SP/RA", key="rasp_busca", placeholder="ex: RA-178/2025")
+
+        pend = status_df[status_df["_status_final"].isin(status_sel)] if status_sel else status_df.iloc[0:0]
+        if busca_sp:
+            pend = pend[pend[SP_NUMERO].astype(str).str.contains(busca_sp, case=False, na=False)]
+        pend = pend.sort_values(["_atrasada", SP_PRAZO], ascending=[False, True]) if SP_PRAZO in pend.columns else pend
+
+        st.markdown(f'<p class="sec-title">Pendências ({fmt_br(len(pend))})</p>', unsafe_allow_html=True)
+        if pend.empty:
+            st.caption("Nada encontrado com os filtros atuais.")
+        else:
+            for _, r in pend.head(60).iterrows():
+                numero_sp = r.get(SP_NUMERO, "—")
+                base      = r.get(SP_LOCAL, "—")
+                cor       = COR_BASE.get(base, G4)
+                descricao = str(r.get(SP_DESCRICAO, ""))[:110]
+                prazo     = r[SP_PRAZO].strftime("%d/%m/%Y") if pd.notna(r.get(SP_PRAZO)) else "—"
+                status_f  = r.get("_status_final", "—")
+                atraso_badge = f'<span style="color:{DR};font-weight:700;font-size:.74rem">⏰ ATRASADA</span>' if r.get("_atrasada") else ""
+                st.markdown(
+                    f'<div style="background:white;border-radius:10px;padding:10px 14px;margin:6px 0;'
+                    f'box-shadow:0 1px 6px rgba(0,0,0,.07);border-left:4px solid {cor}">'
+                    f'<div style="display:flex;justify-content:space-between;gap:8px">'
+                    f'<b style="color:{G1}">{numero_sp}</b>'
+                    f'<span style="font-size:.72rem;color:{cor};font-weight:700">{base}</span>'
+                    f'{atraso_badge}</div>'
+                    f'<div style="font-size:.84rem;color:#333;margin:4px 0">{descricao}</div>'
+                    f'<div style="font-size:.72rem;color:#999">Prazo: {prazo} &nbsp;·&nbsp; Status: {status_f}</div>'
+                    f'</div>', unsafe_allow_html=True)
+                if status_f != STATUS_RESPONDIDA:
+                    if st.button("✍️ Responder", key=f"rasp_btn_{numero_sp}"):
+                        st.session_state["rasp_sp_selecionada"] = numero_sp
+                        st.rerun()
+            if len(pend) > 60:
+                st.caption(f"+ {fmt_br(len(pend)-60)} pendências. Refine a busca.")
+
+        st.markdown("---")
+        st.markdown('<p class="sec-title">✍️ Registrar resposta</p>', unsafe_allow_html=True)
+        opcoes_sp = status_df[status_df["_status_final"] != STATUS_RESPONDIDA][SP_NUMERO].astype(str).tolist()
+        if not opcoes_sp:
+            st.caption("Nenhuma SP pendente de resposta no filtro atual.")
+        else:
+            sel_atual = st.session_state.get("rasp_sp_selecionada")
+            idx_default = opcoes_sp.index(sel_atual) if sel_atual in opcoes_sp else 0
+            with st.form("form_resposta_sp", clear_on_submit=True):
+                sp_escolhida   = st.selectbox("Número da SP", opcoes_sp, index=idx_default)
+                resposta_texto = st.text_area("Resposta / providência tomada", height=120)
+                respondido_por = st.text_input("Seu nome (coordenador/supervisor)")
+                enviado = st.form_submit_button("Registrar resposta")
+
+            if enviado:
+                if not resposta_texto.strip() or not respondido_por.strip():
+                    st.error("Preencha a resposta e o seu nome antes de enviar.")
+                else:
+                    linha_sp = sp_df[sp_df[SP_NUMERO].astype(str) == sp_escolhida].iloc[0]
+                    numero_ra = linha_sp.get("_numero_ra", sp_escolhida)
+                    base_sp   = linha_sp.get(SP_LOCAL, "—")
+                    descricao_sp = str(linha_sp.get(SP_DESCRICAO, ""))
+                    agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    nova_linha = {
+                        "id_resposta": f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{sp_escolhida}",
+                        "numero_sp": sp_escolhida, "numero_ra": numero_ra, "base": base_sp,
+                        "resposta_texto": resposta_texto.strip(), "respondido_por": respondido_por.strip(),
+                        "data_hora_resposta": agora, "status_manual": "Resposta registrada — aguardando lançamento oficial no SAMC",
+                        "email_enviado": "não",
+                    }
+                    token_gh = st.secrets.get("GITHUB_TOKEN")
+                    if not token_gh:
+                        st.error("GITHUB_TOKEN não configurado nos Secrets do app — a resposta não pôde ser salva de forma permanente.")
+                    else:
+                        ok, erro = gravar_linha_append(
+                            "dados/respostas_manuais.csv", ra_sp.RESP_COLS, nova_linha,
+                            f"Resposta registrada: {sp_escolhida} por {respondido_por.strip()}",
+                            token_gh, repo=REPO_GITHUB)
+                        if ok:
+                            gmail_email = st.secrets.get("GMAIL_EMAIL")
+                            gmail_senha = st.secrets.get("GMAIL_APP_PASSWORD")
+                            if gmail_email and gmail_senha:
+                                corpo = ra_sp.montar_corpo_email_resposta(
+                                    sp_escolhida, numero_ra, base_sp, descricao_sp,
+                                    resposta_texto.strip(), respondido_por.strip())
+                                ok_mail, erro_mail = enviar_email(
+                                    EMAIL_HEITOR, f"Nova resposta registrada — {sp_escolhida}", corpo,
+                                    gmail_email, gmail_senha)
+                                nova_linha["email_enviado"] = "sim" if ok_mail else "não"
+                                if not ok_mail:
+                                    st.warning(f"Resposta salva, mas o e-mail não foi enviado: {erro_mail}")
+                            st.session_state["respostas_sessao"].append(nova_linha)
+                            st.session_state["rasp_sp_selecionada"] = None
+                            st.success(f"Resposta registrada para {sp_escolhida}. O Heitor foi avisado por e-mail.")
+                            st.rerun()
+                        else:
+                            st.error(f"Não foi possível salvar a resposta: {erro}. Tente novamente ou avise o Heitor.")
 
 # ════════════════════════════════════════════════════════════════════════════
 # DETALHAMENTO POR Nº DE ORDEM
