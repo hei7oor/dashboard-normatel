@@ -50,7 +50,7 @@ SP_CONCLUIDO_POR = "Concluído Por"
 # Colunas do CSV de respostas manuais (registradas pelos coordenadores/supervisores)
 RESP_COLS = [
     "id_resposta", "numero_sp", "numero_ra", "base", "resposta_texto",
-    "respondido_por", "data_hora_resposta", "status_manual", "email_enviado",
+    "respondido_por", "data_hora_resposta", "status_manual", "email_enviado", "anexo_nome",
 ]
 
 STATUS_RESPONDIDA   = "Respondida oficialmente"

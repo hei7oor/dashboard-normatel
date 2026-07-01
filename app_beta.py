@@ -1268,6 +1268,69 @@ elif base_nav == "📨 RA / SP":
             pend = pend[pend[SP_NUMERO].astype(str).str.contains(busca_sp, case=False, na=False)]
         pend = pend.sort_values(["_atrasada", SP_PRAZO], ascending=[False, True]) if SP_PRAZO in pend.columns else pend
 
+        opcoes_sp = status_df[status_df["_status_final"] != STATUS_RESPONDIDA][SP_NUMERO].astype(str).tolist()
+
+        @st.dialog("✍️ Registrar resposta")
+        def _dialog_resposta(sp_default):
+            idx_default = opcoes_sp.index(sp_default) if sp_default in opcoes_sp else 0
+            with st.form("form_resposta_sp"):
+                sp_escolhida   = st.selectbox("Número da SP", opcoes_sp, index=idx_default)
+                resposta_texto = st.text_area("Resposta / providência tomada", height=120)
+                respondido_por = st.text_input("Seu nome (coordenador/supervisor)")
+                arquivo = st.file_uploader(
+                    "Anexo (opcional, até 5MB)",
+                    type=["pdf", "jpg", "jpeg", "png", "doc", "docx", "xls", "xlsx"])
+                enviado = st.form_submit_button("Registrar resposta")
+
+            if not enviado:
+                return
+            if not resposta_texto.strip() or not respondido_por.strip():
+                st.error("Preencha a resposta e o seu nome antes de enviar.")
+                return
+            if arquivo is not None and arquivo.size > 5 * 1024 * 1024:
+                st.error("Anexo maior que 5MB — escolha um arquivo menor.")
+                return
+
+            linha_sp = sp_df[sp_df[SP_NUMERO].astype(str) == sp_escolhida].iloc[0]
+            numero_ra = linha_sp.get("_numero_ra", sp_escolhida)
+            base_sp   = linha_sp.get(SP_LOCAL, "—")
+            descricao_sp = str(linha_sp.get(SP_DESCRICAO, ""))
+            agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            nova_linha = {
+                "id_resposta": f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{sp_escolhida}",
+                "numero_sp": sp_escolhida, "numero_ra": numero_ra, "base": base_sp,
+                "resposta_texto": resposta_texto.strip(), "respondido_por": respondido_por.strip(),
+                "data_hora_resposta": agora, "status_manual": "Resposta registrada — aguardando lançamento oficial no SAMC",
+                "email_enviado": "não", "anexo_nome": arquivo.name if arquivo is not None else "",
+            }
+            token_gh = st.secrets.get("GITHUB_TOKEN")
+            if not token_gh:
+                st.error("GITHUB_TOKEN não configurado nos Secrets do app — a resposta não pôde ser salva de forma permanente.")
+                return
+            ok, erro = gravar_linha_append(
+                "dados/respostas_manuais.csv", ra_sp.RESP_COLS, nova_linha,
+                f"Resposta registrada: {sp_escolhida} por {respondido_por.strip()}",
+                token_gh, repo=REPO_GITHUB)
+            if not ok:
+                st.error(f"Não foi possível salvar a resposta: {erro}. Tente novamente ou avise o Heitor.")
+                return
+            gmail_email = st.secrets.get("GMAIL_EMAIL")
+            gmail_senha = st.secrets.get("GMAIL_APP_PASSWORD")
+            if gmail_email and gmail_senha:
+                corpo = ra_sp.montar_corpo_email_resposta(
+                    sp_escolhida, numero_ra, base_sp, descricao_sp,
+                    resposta_texto.strip(), respondido_por.strip())
+                anexos = [(arquivo.name, arquivo.getvalue())] if arquivo is not None else None
+                ok_mail, erro_mail = enviar_email(
+                    EMAIL_HEITOR, f"Nova resposta registrada — {sp_escolhida}", corpo,
+                    gmail_email, gmail_senha, anexos=anexos)
+                nova_linha["email_enviado"] = "sim" if ok_mail else "não"
+                if not ok_mail:
+                    st.warning(f"Resposta salva, mas o e-mail não foi enviado: {erro_mail}")
+            st.session_state["respostas_sessao"].append(nova_linha)
+            st.success(f"Resposta registrada para {sp_escolhida}. O Heitor foi avisado por e-mail.")
+            st.rerun()
+
         st.markdown(f'<p class="sec-title">Pendências ({fmt_br(len(pend))})</p>', unsafe_allow_html=True)
         if pend.empty:
             st.caption("Nada encontrado com os filtros atuais.")
@@ -1292,68 +1355,9 @@ elif base_nav == "📨 RA / SP":
                     f'</div>', unsafe_allow_html=True)
                 if status_f != STATUS_RESPONDIDA:
                     if st.button("✍️ Responder", key=f"rasp_btn_{numero_sp}"):
-                        st.session_state["rasp_sp_selecionada"] = numero_sp
-                        st.rerun()
+                        _dialog_resposta(numero_sp)
             if len(pend) > 60:
                 st.caption(f"+ {fmt_br(len(pend)-60)} pendências. Refine a busca.")
-
-        st.markdown("---")
-        st.markdown('<p class="sec-title">✍️ Registrar resposta</p>', unsafe_allow_html=True)
-        opcoes_sp = status_df[status_df["_status_final"] != STATUS_RESPONDIDA][SP_NUMERO].astype(str).tolist()
-        if not opcoes_sp:
-            st.caption("Nenhuma SP pendente de resposta no filtro atual.")
-        else:
-            sel_atual = st.session_state.get("rasp_sp_selecionada")
-            idx_default = opcoes_sp.index(sel_atual) if sel_atual in opcoes_sp else 0
-            with st.form("form_resposta_sp", clear_on_submit=True):
-                sp_escolhida   = st.selectbox("Número da SP", opcoes_sp, index=idx_default)
-                resposta_texto = st.text_area("Resposta / providência tomada", height=120)
-                respondido_por = st.text_input("Seu nome (coordenador/supervisor)")
-                enviado = st.form_submit_button("Registrar resposta")
-
-            if enviado:
-                if not resposta_texto.strip() or not respondido_por.strip():
-                    st.error("Preencha a resposta e o seu nome antes de enviar.")
-                else:
-                    linha_sp = sp_df[sp_df[SP_NUMERO].astype(str) == sp_escolhida].iloc[0]
-                    numero_ra = linha_sp.get("_numero_ra", sp_escolhida)
-                    base_sp   = linha_sp.get(SP_LOCAL, "—")
-                    descricao_sp = str(linha_sp.get(SP_DESCRICAO, ""))
-                    agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    nova_linha = {
-                        "id_resposta": f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{sp_escolhida}",
-                        "numero_sp": sp_escolhida, "numero_ra": numero_ra, "base": base_sp,
-                        "resposta_texto": resposta_texto.strip(), "respondido_por": respondido_por.strip(),
-                        "data_hora_resposta": agora, "status_manual": "Resposta registrada — aguardando lançamento oficial no SAMC",
-                        "email_enviado": "não",
-                    }
-                    token_gh = st.secrets.get("GITHUB_TOKEN")
-                    if not token_gh:
-                        st.error("GITHUB_TOKEN não configurado nos Secrets do app — a resposta não pôde ser salva de forma permanente.")
-                    else:
-                        ok, erro = gravar_linha_append(
-                            "dados/respostas_manuais.csv", ra_sp.RESP_COLS, nova_linha,
-                            f"Resposta registrada: {sp_escolhida} por {respondido_por.strip()}",
-                            token_gh, repo=REPO_GITHUB)
-                        if ok:
-                            gmail_email = st.secrets.get("GMAIL_EMAIL")
-                            gmail_senha = st.secrets.get("GMAIL_APP_PASSWORD")
-                            if gmail_email and gmail_senha:
-                                corpo = ra_sp.montar_corpo_email_resposta(
-                                    sp_escolhida, numero_ra, base_sp, descricao_sp,
-                                    resposta_texto.strip(), respondido_por.strip())
-                                ok_mail, erro_mail = enviar_email(
-                                    EMAIL_HEITOR, f"Nova resposta registrada — {sp_escolhida}", corpo,
-                                    gmail_email, gmail_senha)
-                                nova_linha["email_enviado"] = "sim" if ok_mail else "não"
-                                if not ok_mail:
-                                    st.warning(f"Resposta salva, mas o e-mail não foi enviado: {erro_mail}")
-                            st.session_state["respostas_sessao"].append(nova_linha)
-                            st.session_state["rasp_sp_selecionada"] = None
-                            st.success(f"Resposta registrada para {sp_escolhida}. O Heitor foi avisado por e-mail.")
-                            st.rerun()
-                        else:
-                            st.error(f"Não foi possível salvar a resposta: {erro}. Tente novamente ou avise o Heitor.")
 
 # ════════════════════════════════════════════════════════════════════════════
 # DETALHAMENTO POR Nº DE ORDEM
