@@ -33,14 +33,22 @@ RA / SP — SAMC Petrobras (Relatório de Acompanhamento / Solicitação de Prov
   report diário (GitHub Actions). Também não editar manualmente.
 
 ------------------------------------------------------------
+Service Now — chamados prediais/facilities:
+  SN.xlsx -> export do ServiceNow (chamados CSC, ex: CSC_GP_COMP_ADM_PREDIAL_UTGC)
+     Chave: "Tarefa" (ex: CSC0833999)
+     "Encerrado" vazio = chamado em aberto
+     "Hora da violação" = prazo do ANS (usado para calcular atraso/prioridade)
+
+------------------------------------------------------------
 COMO ATUALIZAR:
-  1. Exporte a planilha nova do SAP, Produtivo, RA ou SP
+  1. Exporte a planilha nova do SAP, Produtivo, RA, SP ou Service Now
   2. Substitua o arquivo nesta pasta (mesmo nome)
   3. No app, clique em "Atualizar" (ou Reboot no Streamlit Cloud)
 
 REGRAS:
   - O nome do arquivo SAP precisa conter "SAP"
   - O nome dos arquivos do SAMC precisa conter "RA" ou "SP"
+  - O nome do arquivo do Service Now precisa conter "SN"
   - Datas no formato DD.MM.AAAA (SAP/Produtivo) ou DD/MM/AAAA (RA/SP)
   - Formatos aceitos: .xlsx, .xls, .csv
 ============================================================

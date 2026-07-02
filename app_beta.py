@@ -14,6 +14,7 @@ from ra_sp import (
 )
 from github_store import gravar_linha_append
 from email_utils import enviar_email
+import service_now as sn
 
 # ════════════════════════════════════════════════════════════════════════════
 # CONFIGURAÇÃO
@@ -401,6 +402,7 @@ MAPA = {
     },
     "ra": ["RA"],   # RA.xlsx — Relatório de Acompanhamento (SAMC Petrobras)
     "sp": ["SP"],   # SP.xlsx — Solicitação de Providência (SAMC Petrobras)
+    "sn": ["SN"],   # SN.xlsx — chamados do ServiceNow
 }
 
 CAMINHO_RESPOSTAS  = os.path.join(PASTA, "respostas_manuais.csv")
@@ -513,6 +515,10 @@ def _ler_sp_cached(caminho):
     return ra_sp.ler_sp(caminho)
 
 @st.cache_data(show_spinner=False)
+def _ler_sn_cached(caminho):
+    return sn.ler_sn(caminho)
+
+@st.cache_data(show_spinner=False)
 def carregar_todos():
     sap  = {b: None for b in BASES_SAP}
     prod = {"realizar":None,"andamento":None,"finalizadas":None}
@@ -553,9 +559,18 @@ def carregar_todos():
             log.append(("sp", len(sp_df), "sp"))
         except Exception:
             pass
-    return sap, prod, ra_df, sp_df, log
+    # ServiceNow
+    sn_df = pd.DataFrame()
+    c = encontrar_arquivo(PASTA, MAPA["sn"])
+    if c:
+        try:
+            sn_df = _ler_sn_cached(c)
+            log.append(("sn", len(sn_df), "sn"))
+        except Exception:
+            pass
+    return sap, prod, ra_df, sp_df, sn_df, log
 
-sap_data, prod_data, ra_df, sp_df, _log = carregar_todos()
+sap_data, prod_data, ra_df, sp_df, sn_df, _log = carregar_todos()
 
 if "chat"        not in st.session_state: st.session_state.chat = []
 if "chat_aberto" not in st.session_state: st.session_state.chat_aberto = False
@@ -965,7 +980,7 @@ def get_sap_filtrado(bases=None):
 # ════════════════════════════════════════════════════════════════════════════
 # NAVEGAÇÃO: BASE
 # ════════════════════════════════════════════════════════════════════════════
-nav_opts = ["🌐 Visão Geral", "📅 Programação", "📨 RA / SP"] + (bases_sel if bases_sel else sap_ok) + ["🔍 Detalhamento"]
+nav_opts = ["🌐 Visão Geral", "📅 Programação", "📨 RA / SP", "🛠️ Service Now"] + (bases_sel if bases_sel else sap_ok) + ["🔍 Detalhamento"]
 base_nav = st.radio("", nav_opts, horizontal=True,
                     key="base_nav", label_visibility="collapsed")
 st.markdown("---")
@@ -1429,6 +1444,103 @@ elif base_nav == "📨 RA / SP":
                         _dialog_resposta(numero_sp)
             if len(pend) > 60:
                 st.caption(f"+ {fmt_br(len(pend)-60)} pendências. Refine a busca.")
+
+# ════════════════════════════════════════════════════════════════════════════
+# SERVICE NOW — chamados prediais/facilities
+# ════════════════════════════════════════════════════════════════════════════
+elif base_nav == "🛠️ Service Now":
+    st.markdown('<p class="sec-title">🛠️ Service Now — Chamados Prediais</p>', unsafe_allow_html=True)
+
+    if sn_df.empty:
+        st.info("Nenhum arquivo **SN.xlsx** encontrado em `dados/`. Exporte o relatório do ServiceNow e adicione-o à pasta.")
+    else:
+        status_sn = sn.calcular_prioridade(sn_df, hoje=HOJE)
+        kp = sn.kpis_sn(status_sn)
+
+        k1,k2,k3,k4,k5 = st.columns(5)
+        k1.metric("Total de chamados",  fmt_br(kp["total"]))
+        k2.metric("🟡 Abertos",         fmt_br(kp["abertos"]))
+        k3.metric("🔴 Vencidos",        fmt_br(kp["vencidos"]))
+        k4.metric("✅ Concluídos",      fmt_br(kp["concluidos"]))
+        k5.metric("% Aberto no prazo",  f"{kp['pct_no_prazo']}%")
+        st.markdown("---")
+
+        abertos_df = status_sn[status_sn["_aberto"]]
+
+        f1, f2, f3 = st.columns([2, 1.4, 2])
+        with f1:
+            categorias = sorted(abertos_df[sn.SN_CATEGORIA].dropna().unique().tolist())
+            cat_sel = st.multiselect("Categoria", categorias, default=[],
+                                      placeholder="Todas", key="sn_cat_sel")
+        with f2:
+            situacao_sel = st.multiselect("Situação", ["Vencido", "No prazo"], default=[],
+                                           placeholder="Todas", key="sn_sit_sel")
+        with f3:
+            busca_sn = st.text_input("Buscar por tarefa/descrição", key="sn_busca",
+                                      placeholder="ex: CSC0833999 ou chuveiro")
+
+        view = abertos_df.copy()
+        if cat_sel:
+            view = view[view[sn.SN_CATEGORIA].isin(cat_sel)]
+        if situacao_sel:
+            cond = pd.Series(False, index=view.index)
+            if "Vencido" in situacao_sel: cond |= view["_vencido"]
+            if "No prazo" in situacao_sel: cond |= ~view["_vencido"]
+            view = view[cond]
+        if busca_sn:
+            m = (view[sn.SN_TAREFA].astype(str).str.contains(busca_sn, case=False, na=False) |
+                 view[sn.SN_DESCRICAO].astype(str).str.contains(busca_sn, case=False, na=False))
+            view = view[m]
+        view = view.sort_values("_prioridade")
+
+        st.markdown(f'<p class="sec-title">Chamados abertos ({fmt_br(len(view))}) — ordenados por prioridade</p>',
+                    unsafe_allow_html=True)
+        if view.empty:
+            st.caption("Nada encontrado com os filtros atuais.")
+        else:
+            tabela = view.copy()
+            tabela["Situação"]  = tabela["_vencido"].map({True: "🔴 Vencido", False: "🟡 No prazo"})
+            tabela["Aberto em"] = tabela[sn.SN_ABERTO].dt.strftime("%d/%m/%Y %H:%M")
+            tabela["Prazo"]     = tabela[sn.SN_PRAZO].dt.strftime("%d/%m/%Y %H:%M")
+            tabela_view = tabela[[sn.SN_TAREFA, sn.SN_CATEGORIA, "Situação", "Aberto em", "Prazo",
+                                  "_dias_atraso", "_dias_restantes", sn.SN_STATUS,
+                                  sn.SN_SOLICITANTE, sn.SN_RESPONSAVEL, sn.SN_DESCRICAO]].rename(columns={
+                sn.SN_TAREFA: "Tarefa", sn.SN_CATEGORIA: "Categoria", sn.SN_STATUS: "Status",
+                "_dias_atraso": "Dias atraso", "_dias_restantes": "Dias restantes",
+                sn.SN_SOLICITANTE: "Solicitante", sn.SN_RESPONSAVEL: "Responsável",
+                sn.SN_DESCRICAO: "Descrição",
+            })
+            tabela_view["Dias atraso"]    = tabela_view["Dias atraso"].round(1)
+            tabela_view["Dias restantes"] = tabela_view["Dias restantes"].round(1)
+
+            st.dataframe(
+                tabela_view.head(300), use_container_width=True, hide_index=True, height=460,
+                column_config={
+                    "Descrição": st.column_config.TextColumn(width="large"),
+                    "Dias atraso": st.column_config.NumberColumn(format="%.1f"),
+                    "Dias restantes": st.column_config.NumberColumn(format="%.1f"),
+                })
+            if len(view) > 300:
+                st.caption(f"+ {fmt_br(len(view)-300)} chamados. Refine os filtros pra ver mais.")
+
+        st.markdown("---")
+        st.markdown('<p class="sec-title">Top categorias em aberto</p>', unsafe_allow_html=True)
+        top_cat = abertos_df[sn.SN_CATEGORIA].value_counts().head(15).reset_index()
+        top_cat.columns = ["Categoria", "Qtd"]
+        fig_cat = px.bar(top_cat, x="Qtd", y="Categoria", orientation="h", text_auto=True,
+                          color_discrete_sequence=[ROXO])
+        graf_layout(fig_cat, 420)
+        fig_cat.update_layout(yaxis={"categoryorder": "total ascending"})
+        st.plotly_chart(fig_cat, use_container_width=True)
+
+        st.markdown("---")
+        st.markdown('<p class="sec-title">📤 Exportar pendências</p>', unsafe_allow_html=True)
+        base_export = view if not view.empty else abertos_df.sort_values("_prioridade")
+        csv_txt = sn.exportar_resumo_csv(base_export)
+        st.download_button(
+            "⬇️ Baixar resumo dos chamados pendentes (CSV)", data=csv_txt,
+            file_name=f"servicenow_pendencias_{HOJE.strftime('%Y%m%d')}.csv",
+            mime="text/csv", key="sn_download")
 
 # ════════════════════════════════════════════════════════════════════════════
 # DETALHAMENTO POR Nº DE ORDEM
