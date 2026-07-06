@@ -23,10 +23,11 @@ from email_utils import enviar_email
 from github_store import gravar_linha_append, REPO_PADRAO
 
 EMAIL_HEITOR = "heitor.fernandes@normatel.com.br"
-CAMINHO_RA          = os.path.join(RAIZ, "dados", "RA.xlsx")
-CAMINHO_SP          = os.path.join(RAIZ, "dados", "SP.xlsx")
-CAMINHO_RESPOSTAS   = os.path.join(RAIZ, "dados", "respostas_manuais.csv")
-CAMINHO_HISTORICO   = os.path.join(RAIZ, "dados", "historico_kpis.csv")
+CAMINHO_RA           = os.path.join(RAIZ, "dados", "RA.xlsx")
+CAMINHO_SP           = os.path.join(RAIZ, "dados", "SP.xlsx")
+CAMINHO_RESPOSTAS    = os.path.join(RAIZ, "dados", "respostas_manuais.csv")
+CAMINHO_HISTORICO    = os.path.join(RAIZ, "dados", "historico_kpis.csv")
+CAMINHO_RESPONSAVEIS = os.path.join(RAIZ, "dados", "responsaveis_sp.csv")
 HISTORICO_COLS = ["data", "total_sp", "sem_resposta", "aguardando", "respondida", "atrasada", "pct_respondido"]
 
 
@@ -41,9 +42,11 @@ def calcular_variacao(geral_hoje):
     if hist.empty:
         return None
     ontem = hist.iloc[-1]
+    data_ant = pd.to_datetime(ontem["data"]).strftime("%d/%m/%Y")
     return {
         "sem_resposta": geral_hoje["sem_resposta"] - int(ontem["sem_resposta"]),
         "atrasada": geral_hoje["atrasada"] - int(ontem["atrasada"]),
+        "data_anterior": data_ant,
     }
 
 
@@ -67,13 +70,18 @@ def main():
     sp = ra_sp.ler_sp(CAMINHO_SP)
     ra = ra_sp.ler_ra(CAMINHO_RA) if os.path.exists(CAMINHO_RA) else pd.DataFrame()
     respostas = ra_sp.ler_respostas_manuais(CAMINHO_RESPOSTAS)
+    responsaveis = ra_sp.carregar_responsaveis(CAMINHO_RESPONSAVEIS)
+    sp = ra_sp.anexar_responsavel(sp, responsaveis)
 
     status_df = ra_sp.combinar_status(sp, respostas)
     geral, por_base = ra_sp.kpis_ra_sp(ra, status_df)
+    por_responsavel = ra_sp.kpis_por_responsavel(status_df)
     variacao = calcular_variacao(geral)
     urgentes = status_df[status_df["_atrasada"]].sort_values(ra_sp.SP_PRAZO)
 
-    corpo = ra_sp.montar_corpo_status_diario(geral, por_base, urgentes, variacao)
+    corpo = ra_sp.montar_corpo_status_diario(
+        geral, por_base, urgentes, variacao,
+        por_responsavel=por_responsavel, data_hoje=datetime.now())
     ok, erro = enviar_email(EMAIL_HEITOR, "Status diário RA/SP — SAMC Petrobras", corpo, gmail_email, gmail_senha)
     if ok:
         print("E-mail de status diário enviado com sucesso.")

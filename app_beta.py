@@ -405,8 +405,9 @@ MAPA = {
     "sn": ["SN"],   # SN.xlsx — chamados do ServiceNow
 }
 
-CAMINHO_RESPOSTAS  = os.path.join(PASTA, "respostas_manuais.csv")
-CAMINHO_HISTORICO  = os.path.join(PASTA, "historico_kpis.csv")
+CAMINHO_RESPOSTAS    = os.path.join(PASTA, "respostas_manuais.csv")
+CAMINHO_HISTORICO    = os.path.join(PASTA, "historico_kpis.csv")
+CAMINHO_RESPONSAVEIS = os.path.join(PASTA, "responsaveis_sp.csv")
 REPO_GITHUB        = "hei7oor/dashboard-normatel"
 EMAIL_HEITOR       = "heitor.fernandes@normatel.com.br"
 
@@ -421,7 +422,7 @@ DISCIPLINA_NOME = {
 # FUNÇÕES DE LEITURA
 # ════════════════════════════════════════════════════════════════════════════
 # arquivos gerados pelo próprio app (não são fonte de dados a ser localizada por padrão de nome)
-ARQUIVOS_INTERNOS = {"RESPOSTAS_MANUAIS.CSV", "HISTORICO_KPIS.CSV"}
+ARQUIVOS_INTERNOS = {"RESPOSTAS_MANUAIS.CSV", "HISTORICO_KPIS.CSV", "RESPONSAVEIS_SP.CSV"}
 
 def encontrar_arquivo(pasta, padroes):
     if not os.path.isdir(pasta): return None
@@ -1257,6 +1258,8 @@ elif base_nav == "📨 RA / SP":
         if SP_LOCAL in sp_f.columns and bases_sel:
             sp_f = sp_f[sp_f[SP_LOCAL].isin(bases_sel)]
         sp_f = ra_sp.anexar_data_abertura(sp_f, ra_df)
+        responsaveis_sp = ra_sp.carregar_responsaveis(CAMINHO_RESPONSAVEIS)
+        sp_f = ra_sp.anexar_responsavel(sp_f, responsaveis_sp)
 
         # ── filtro rápido de período (por data de abertura da SP) ──
         PERIODOS_RASP = {
@@ -1298,6 +1301,18 @@ elif base_nav == "📨 RA / SP":
                     f'<div style="font-size:.82rem;color:{DR}">Atrasadas: <b>{fmt_br(kp["atrasada"])}</b></div>'
                     f'<div style="font-size:.82rem">Respondido: <b>{kp["pct_respondido"]}%</b></div>'
                     f'</div>', unsafe_allow_html=True)
+        st.markdown("---")
+
+        st.markdown('<p class="sec-title">Distribuição por responsável</p>', unsafe_allow_html=True)
+        por_resp = ra_sp.kpis_por_responsavel(status_df)
+        if por_resp.empty:
+            st.caption("Nenhuma pendência no filtro atual.")
+        else:
+            tabela_resp = por_resp.rename(columns={
+                "responsavel": "Responsável", "frente": "Frente", "qtde": "Qtde pendente",
+                "vencidas": "Vencidas", "no_prazo": "No prazo",
+            })
+            st.dataframe(tabela_resp, use_container_width=True, hide_index=True)
         st.markdown("---")
 
         # ── filtro de status + busca ──

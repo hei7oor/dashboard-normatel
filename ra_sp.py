@@ -269,6 +269,60 @@ def kpis_ra_sp(df_ra, df_sp_status):
     return geral, por_base
 
 
+RESPONSAVEL_COLS = ["numero_sp", "frente", "responsavel"]
+
+
+def carregar_responsaveis(caminho):
+    """
+    Lê dados/responsaveis_sp.csv — mapeamento manual (numero_sp -> frente/responsável)
+    feito pelo Heitor pra distribuir as pendências entre a equipe. SPs que ainda não
+    foram classificadas nesse arquivo aparecem como "(a classificar)".
+    """
+    if not caminho or not os.path.exists(caminho):
+        return pd.DataFrame(columns=RESPONSAVEL_COLS)
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+    for col in RESPONSAVEL_COLS:
+        if col not in df.columns:
+            df[col] = ""
+    return df[RESPONSAVEL_COLS]
+
+
+def anexar_responsavel(df_sp, df_responsaveis):
+    """Anexa `_frente`/`_responsavel` à SP a partir do mapeamento manual por numero_sp."""
+    d = df_sp.copy()
+    if df_responsaveis is None or df_responsaveis.empty:
+        d["_frente"] = "(a classificar)"
+        d["_responsavel"] = "(a classificar)"
+        return d
+    mapa = df_responsaveis.drop_duplicates("numero_sp", keep="last").set_index("numero_sp")
+    d["_frente"] = d[SP_NUMERO].map(mapa["frente"]).fillna("(a classificar)")
+    d["_responsavel"] = d[SP_NUMERO].map(mapa["responsavel"]).fillna("(a classificar)")
+    d.loc[d["_frente"] == "", "_frente"] = "(a classificar)"
+    d.loc[d["_responsavel"] == "", "_responsavel"] = "(a classificar)"
+    return d
+
+
+def kpis_por_responsavel(status_df):
+    """
+    Distribuição das pendências (SP ainda sem resposta oficial) por responsável/frente —
+    mesmo formato da planilha de distribuição manual. Retorna um DataFrame com colunas
+    responsavel, frente, qtde, vencidas, no_prazo, ordenado da maior pra menor pendência.
+    """
+    if "_responsavel" not in status_df.columns:
+        return pd.DataFrame(columns=["responsavel", "frente", "qtde", "vencidas", "no_prazo"])
+    pend = status_df[status_df["_status_final"] != STATUS_RESPONDIDA]
+    if pend.empty:
+        return pd.DataFrame(columns=["responsavel", "frente", "qtde", "vencidas", "no_prazo"])
+    g = pend.groupby(["_responsavel", "_frente"], dropna=False).agg(
+        qtde=("_status_final", "size"),
+        vencidas=("_atrasada", "sum"),
+    ).reset_index()
+    g["vencidas"] = g["vencidas"].astype(int)
+    g["no_prazo"] = g["qtde"] - g["vencidas"]
+    g.columns = ["responsavel", "frente", "qtde", "vencidas", "no_prazo"]
+    return g.sort_values("qtde", ascending=False)
+
+
 def montar_corpo_email_resposta(numero_sp, numero_ra, base, descricao, resposta_texto, respondido_por):
     return f"""
     <div style="font-family:Arial,sans-serif;font-size:14px;color:#222">
@@ -287,7 +341,9 @@ def montar_corpo_email_resposta(numero_sp, numero_ra, base, descricao, resposta_
     """
 
 
-def montar_corpo_status_diario(geral, por_base, urgentes_df, variacao=None):
+def montar_corpo_status_diario(geral, por_base, urgentes_df, variacao=None, por_responsavel=None, data_hoje=None):
+    data_hoje_str = data_hoje.strftime("%d/%m/%Y") if data_hoje is not None else ""
+
     linhas_base = ""
     for base, kp in por_base.items():
         linhas_base += (
@@ -298,21 +354,57 @@ def montar_corpo_status_diario(geral, por_base, urgentes_df, variacao=None):
             f'<td style="padding:4px 8px;text-align:center">{kp["pct_respondido"]}%</td></tr>'
         )
 
-    variacao_html = ""
+    def _seta(valor):
+        if valor > 0: return f'<span style="color:#E53935">▲ +{valor}</span>'
+        if valor < 0: return f'<span style="color:#2E7D32">▼ {valor}</span>'
+        return '<span style="color:#888">= 0</span>'
+
     if variacao:
-        sinal = "+" if variacao.get("sem_resposta", 0) >= 0 else ""
+        data_ant = variacao.get("data_anterior", "posição anterior")
         variacao_html = (
-            f'<p>Variação em relação a ontem: {sinal}{variacao.get("sem_resposta",0)} sem resposta, '
-            f'{"+" if variacao.get("atrasada",0)>=0 else ""}{variacao.get("atrasada",0)} atrasadas.</p>'
+            f'<div style="background:#F4F6F4;border-radius:8px;padding:10px 14px;margin:10px 0">'
+            f'<b>Evolução desde {data_ant}:</b><br>'
+            f'Sem resposta: {_seta(variacao.get("sem_resposta", 0))} &nbsp;&nbsp;|&nbsp;&nbsp; '
+            f'Atrasadas: {_seta(variacao.get("atrasada", 0))}'
+            f'</div>'
         )
     else:
-        variacao_html = "<p style='color:#888'>Sem dados de comparação com o dia anterior ainda.</p>"
+        variacao_html = (
+            '<p style="color:#888">Primeira captura no novo formato de acompanhamento — '
+            'a partir de amanhã este e-mail já mostra a evolução dia a dia.</p>'
+        )
+
+    resp_html = ""
+    if por_responsavel is not None and not por_responsavel.empty:
+        linhas_resp = ""
+        for _, r in por_responsavel.iterrows():
+            linhas_resp += (
+                f'<tr><td style="padding:4px 8px"><b>{r["responsavel"]}</b></td>'
+                f'<td style="padding:4px 8px">{r["frente"]}</td>'
+                f'<td style="padding:4px 8px;text-align:center">{int(r["qtde"])}</td>'
+                f'<td style="padding:4px 8px;text-align:center;color:#E53935">{int(r["vencidas"])}</td>'
+                f'<td style="padding:4px 8px;text-align:center">{int(r["no_prazo"])}</td></tr>'
+            )
+        resp_html = f"""
+        <h3 style="color:#1B5E20">Distribuição por responsável</h3>
+        <table style="border-collapse:collapse;width:100%;margin:12px 0;border:1px solid #eee">
+          <tr style="background:#F4F6F4">
+            <th style="padding:4px 8px;text-align:left">Responsável</th>
+            <th style="padding:4px 8px;text-align:left">Frente</th>
+            <th style="padding:4px 8px">Qtde pendente</th>
+            <th style="padding:4px 8px">Vencidas</th>
+            <th style="padding:4px 8px">No prazo</th>
+          </tr>
+          {linhas_resp}
+        </table>
+        """
 
     urgentes_html = ""
     if urgentes_df is not None and not urgentes_df.empty:
         for _, r in urgentes_df.head(10).iterrows():
+            resp_tag = f' · <span style="color:#888">{r.get("_responsavel","")}</span>' if "_responsavel" in urgentes_df.columns else ""
             urgentes_html += (
-                f'<li><b>{r.get(SP_NUMERO,"—")}</b> ({r.get(SP_LOCAL,"—")}) — '
+                f'<li><b>{r.get(SP_NUMERO,"—")}</b> ({r.get(SP_LOCAL,"—")}){resp_tag} — '
                 f'{str(r.get(SP_DESCRICAO,""))[:90]}</li>'
             )
         urgentes_html = f"<ul>{urgentes_html}</ul>"
@@ -321,12 +413,13 @@ def montar_corpo_status_diario(geral, por_base, urgentes_df, variacao=None):
 
     return f"""
     <div style="font-family:Arial,sans-serif;font-size:14px;color:#222">
-      <h2 style="color:#1B5E20">Status diário RA/SP — SAMC Petrobras</h2>
+      <h2 style="color:#1B5E20">Status diário RA/SP — SAMC Petrobras{' — ' + data_hoje_str if data_hoje_str else ''}</h2>
       <p>Total de SP: <b>{geral['total_sp']}</b> &nbsp;|&nbsp;
          Sem resposta: <b style="color:#E53935">{geral['sem_resposta']}</b> &nbsp;|&nbsp;
          Atrasadas: <b style="color:#E53935">{geral['atrasada']}</b> &nbsp;|&nbsp;
          % respondido: <b>{geral['pct_respondido']}%</b></p>
       {variacao_html}
+      <h3 style="color:#1B5E20">Por base</h3>
       <table style="border-collapse:collapse;width:100%;margin:12px 0;border:1px solid #eee">
         <tr style="background:#F4F6F4">
           <th style="padding:4px 8px;text-align:left">Base</th>
@@ -337,6 +430,7 @@ def montar_corpo_status_diario(geral, por_base, urgentes_df, variacao=None):
         </tr>
         {linhas_base}
       </table>
+      {resp_html}
       <h3 style="color:#E53935">Mais urgentes (atrasadas)</h3>
       {urgentes_html}
     </div>
