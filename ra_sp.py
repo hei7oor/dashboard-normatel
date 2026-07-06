@@ -341,7 +341,11 @@ def montar_corpo_email_resposta(numero_sp, numero_ra, base, descricao, resposta_
     """
 
 
-def montar_corpo_status_diario(geral, por_base, urgentes_df, variacao=None, por_responsavel=None, data_hoje=None):
+def montar_corpo_status_diario(geral, por_base, variacao=None, data_hoje=None):
+    """
+    Corpo do e-mail de status diário — enxuto, só com o essencial: resumo geral,
+    evolução em relação à captura anterior e a quebra por base.
+    """
     data_hoje_str = data_hoje.strftime("%d/%m/%Y") if data_hoje is not None else ""
 
     linhas_base = ""
@@ -374,43 +378,6 @@ def montar_corpo_status_diario(geral, por_base, urgentes_df, variacao=None, por_
             'a partir de amanhã este e-mail já mostra a evolução dia a dia.</p>'
         )
 
-    resp_html = ""
-    if por_responsavel is not None and not por_responsavel.empty:
-        linhas_resp = ""
-        for _, r in por_responsavel.iterrows():
-            linhas_resp += (
-                f'<tr><td style="padding:4px 8px"><b>{r["responsavel"]}</b></td>'
-                f'<td style="padding:4px 8px">{r["frente"]}</td>'
-                f'<td style="padding:4px 8px;text-align:center">{int(r["qtde"])}</td>'
-                f'<td style="padding:4px 8px;text-align:center;color:#E53935">{int(r["vencidas"])}</td>'
-                f'<td style="padding:4px 8px;text-align:center">{int(r["no_prazo"])}</td></tr>'
-            )
-        resp_html = f"""
-        <h3 style="color:#1B5E20">Distribuição por responsável</h3>
-        <table style="border-collapse:collapse;width:100%;margin:12px 0;border:1px solid #eee">
-          <tr style="background:#F4F6F4">
-            <th style="padding:4px 8px;text-align:left">Responsável</th>
-            <th style="padding:4px 8px;text-align:left">Frente</th>
-            <th style="padding:4px 8px">Qtde pendente</th>
-            <th style="padding:4px 8px">Vencidas</th>
-            <th style="padding:4px 8px">No prazo</th>
-          </tr>
-          {linhas_resp}
-        </table>
-        """
-
-    urgentes_html = ""
-    if urgentes_df is not None and not urgentes_df.empty:
-        for _, r in urgentes_df.head(10).iterrows():
-            resp_tag = f' · <span style="color:#888">{r.get("_responsavel","")}</span>' if "_responsavel" in urgentes_df.columns else ""
-            urgentes_html += (
-                f'<li><b>{r.get(SP_NUMERO,"—")}</b> ({r.get(SP_LOCAL,"—")}){resp_tag} — '
-                f'{str(r.get(SP_DESCRICAO,""))[:90]}</li>'
-            )
-        urgentes_html = f"<ul>{urgentes_html}</ul>"
-    else:
-        urgentes_html = "<p>Nenhuma pendência atrasada no momento.</p>"
-
     return f"""
     <div style="font-family:Arial,sans-serif;font-size:14px;color:#222">
       <h2 style="color:#1B5E20">Status diário RA/SP — SAMC Petrobras{' — ' + data_hoje_str if data_hoje_str else ''}</h2>
@@ -430,8 +397,5 @@ def montar_corpo_status_diario(geral, por_base, urgentes_df, variacao=None, por_
         </tr>
         {linhas_base}
       </table>
-      {resp_html}
-      <h3 style="color:#E53935">Mais urgentes (atrasadas)</h3>
-      {urgentes_html}
     </div>
     """
