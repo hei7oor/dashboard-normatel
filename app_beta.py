@@ -1388,7 +1388,8 @@ elif base_nav == "📨 RA / SP":
                 base        = r.get(SP_LOCAL, "—")
                 cor         = COR_BASE.get(base, G4)
                 contrato    = r.get(SP_CONTRATO, "—")
-                descricao   = str(r.get(SP_DESCRICAO, "") or "—")
+                descricao_ra = str(r.get("_descricao_ra", "") or "—")
+                descricao_sp = str(r.get(SP_DESCRICAO, "") or "—")
                 elaborado   = r.get(SP_ELABORADO, "—")
                 status_of   = r.get(SP_STATUS, "—")
                 status_at   = r.get(SP_STATUS_ATEND, "—")
@@ -1427,7 +1428,12 @@ elif base_nav == "📨 RA / SP":
                     f'<span style="font-size:.72rem;color:{cor};font-weight:700">{base}</span>'
                     f'<span style="background:{cor_status};color:white;padding:2px 9px;border-radius:20px;font-size:.68rem;font-weight:700">{status_f}</span>'
                     f'{atraso_badge}</span></div>'
-                    f'<div style="font-size:.86rem;color:#333;margin:6px 0">{descricao}</div>'
+                    f'<div style="font-size:.8rem;color:#333;margin:6px 0;background:#F4F6F4;'
+                    f'border-radius:6px;padding:6px 10px">'
+                    f'<span style="color:{G2};font-weight:700">📄 O que pede a RA:</span> {descricao_ra}</div>'
+                    f'<div style="font-size:.8rem;color:#333;margin:6px 0;background:#F4F6F4;'
+                    f'border-radius:6px;padding:6px 10px">'
+                    f'<span style="color:{G2};font-weight:700">📌 O que pede a SP:</span> {descricao_sp}</div>'
                     f'<div style="display:flex;flex-wrap:wrap;gap:14px;font-size:.75rem;color:#666">'
                     f'<div>Contrato: <b>{contrato}</b></div>'
                     f'<div>Abertura: <b>{abertura}</b></div>'

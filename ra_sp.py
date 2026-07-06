@@ -210,14 +210,17 @@ def combinar_status(df_sp, df_respostas, hoje=None):
 
 def anexar_data_abertura(df_sp, df_ra):
     """
-    Anexa a coluna `_data_abertura` ao SP: data em que a SP foi registrada
-    (coluna `Registro SP` da RA-mãe) e, quando não disponível, cai para a
-    `Data de Criação` da RA-mãe. Usada nos filtros rápidos de período
-    (hoje / últimos N dias) na aba RA/SP.
+    Anexa à SP as informações que só existem na RA-mãe:
+      _data_abertura: data em que a SP foi registrada (coluna `Registro SP` da RA) —
+                      cai para a `Data de Criação` da RA quando não disponível.
+      _descricao_ra: o texto da própria RA (`Descrição`) — "o que pede a RA", que é
+                     diferente do que a SP pede (`Descrição` da própria SP).
+    Usada nos filtros rápidos de período e nos cards da aba RA/SP.
     """
     d = df_sp.copy()
     if df_ra is None or df_ra.empty or RA_NUMERO_SP not in df_ra.columns:
         d["_data_abertura"] = pd.NaT
+        d["_descricao_ra"] = None
         return d
 
     mapa_sp = (df_ra.dropna(subset=[RA_NUMERO_SP])
@@ -226,13 +229,21 @@ def anexar_data_abertura(df_sp, df_ra):
     data_por_sp = mapa_sp[RA_REGISTRO_SP] if RA_REGISTRO_SP in mapa_sp.columns else pd.Series(dtype="datetime64[ns]")
     d["_data_abertura"] = d[SP_NUMERO].map(data_por_sp)
 
-    if RA_NUMERO in df_ra.columns and RA_DT_CRIACAO in df_ra.columns and "_numero_ra" in d.columns:
+    mapa_ra = None
+    if RA_NUMERO in df_ra.columns:
         mapa_ra = (df_ra.dropna(subset=[RA_NUMERO])
                    .drop_duplicates(RA_NUMERO, keep="last")
                    .set_index(RA_NUMERO))
+
+    if mapa_ra is not None and RA_DT_CRIACAO in mapa_ra.columns and "_numero_ra" in d.columns:
         data_por_ra = mapa_ra[RA_DT_CRIACAO]
         faltando = d["_data_abertura"].isna()
         d.loc[faltando, "_data_abertura"] = d.loc[faltando, "_numero_ra"].map(data_por_ra)
+
+    if mapa_ra is not None and RA_DESCRICAO in mapa_ra.columns and "_numero_ra" in d.columns:
+        d["_descricao_ra"] = d["_numero_ra"].map(mapa_ra[RA_DESCRICAO])
+    else:
+        d["_descricao_ra"] = None
     return d
 
 
