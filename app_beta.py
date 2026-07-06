@@ -1463,15 +1463,48 @@ elif base_nav == "🛠️ Service Now":
         status_sn = sn.calcular_prioridade(sn_df, hoje=HOJE)
         kp = sn.kpis_sn(status_sn)
 
-        k1,k2,k3,k4,k5 = st.columns(5)
+        k1,k2,k3,k4,k5,k6 = st.columns(6)
         k1.metric("Total de chamados",  fmt_br(kp["total"]))
         k2.metric("🟡 Abertos",         fmt_br(kp["abertos"]))
         k3.metric("🔴 Vencidos",        fmt_br(kp["vencidos"]))
-        k4.metric("✅ Concluídos",      fmt_br(kp["concluidos"]))
-        k5.metric("% Aberto no prazo",  f"{kp['pct_no_prazo']}%")
+        k4.metric("🟠 Críticos (7 dias)", fmt_br(kp["criticos"]))
+        k5.metric("✅ Concluídos",      fmt_br(kp["concluidos"]))
+        k6.metric("% Aberto no prazo",  f"{kp['pct_no_prazo']}%")
         st.markdown("---")
 
         abertos_df = status_sn[status_sn["_aberto"]]
+
+        # ── Programação — chamados que vencem nos próximos 7 dias (críticos) ──
+        criticos_df = abertos_df[abertos_df["_critico"]].sort_values("_dias_restantes")
+        st.markdown(f'<p class="sec-title">🚨 Programação — Vencem nos próximos 7 dias ({fmt_br(len(criticos_df))})</p>',
+                    unsafe_allow_html=True)
+        if criticos_df.empty:
+            st.caption("Nenhum chamado aberto vence nos próximos 7 dias.")
+        else:
+            hoje_c = int((criticos_df["_dias_restantes"] <= 1).sum())
+            c3_c   = int(((criticos_df["_dias_restantes"] > 1) & (criticos_df["_dias_restantes"] <= 3)).sum())
+            c7_c   = int((criticos_df["_dias_restantes"] > 3).sum())
+            pc1, pc2, pc3 = st.columns(3)
+            pc1.metric("📍 Vence hoje/amanhã", fmt_br(hoje_c))
+            pc2.metric("🗓️ Em 2–3 dias",       fmt_br(c3_c))
+            pc3.metric("📦 Em 4–7 dias",        fmt_br(c7_c))
+
+            prog = criticos_df.copy()
+            prog["Prazo"]     = prog[sn.SN_PRAZO].dt.strftime("%d/%m/%Y %H:%M")
+            prog["Aberto em"] = prog[sn.SN_ABERTO].dt.strftime("%d/%m/%Y %H:%M")
+            prog["Dias restantes"] = prog["_dias_restantes"].round(1)
+            prog_view = prog[[sn.SN_TAREFA, sn.SN_CATEGORIA, "Dias restantes", "Prazo", "Aberto em",
+                               sn.SN_STATUS, sn.SN_SOLICITANTE, sn.SN_RESPONSAVEL, sn.SN_DESCRICAO]].rename(columns={
+                sn.SN_TAREFA: "Tarefa", sn.SN_CATEGORIA: "Categoria", sn.SN_STATUS: "Status",
+                sn.SN_SOLICITANTE: "Solicitante", sn.SN_RESPONSAVEL: "Responsável", sn.SN_DESCRICAO: "Descrição",
+            })
+            st.dataframe(
+                prog_view, use_container_width=True, hide_index=True, height=300,
+                column_config={
+                    "Descrição": st.column_config.TextColumn(width="large"),
+                    "Dias restantes": st.column_config.NumberColumn(format="%.1f"),
+                })
+        st.markdown("---")
 
         f1, f2, f3 = st.columns([2, 1.4, 2])
         with f1:
@@ -1479,7 +1512,7 @@ elif base_nav == "🛠️ Service Now":
             cat_sel = st.multiselect("Categoria", categorias, default=[],
                                       placeholder="Todas", key="sn_cat_sel")
         with f2:
-            situacao_sel = st.multiselect("Situação", ["Vencido", "No prazo"], default=[],
+            situacao_sel = st.multiselect("Situação", ["Vencido", "Crítico", "No prazo"], default=[],
                                            placeholder="Todas", key="sn_sit_sel")
         with f3:
             busca_sn = st.text_input("Buscar por tarefa/descrição", key="sn_busca",
@@ -1491,7 +1524,8 @@ elif base_nav == "🛠️ Service Now":
         if situacao_sel:
             cond = pd.Series(False, index=view.index)
             if "Vencido" in situacao_sel: cond |= view["_vencido"]
-            if "No prazo" in situacao_sel: cond |= ~view["_vencido"]
+            if "Crítico" in situacao_sel: cond |= view["_critico"]
+            if "No prazo" in situacao_sel: cond |= (~view["_vencido"] & ~view["_critico"])
             view = view[cond]
         if busca_sn:
             m = (view[sn.SN_TAREFA].astype(str).str.contains(busca_sn, case=False, na=False) |
@@ -1505,7 +1539,8 @@ elif base_nav == "🛠️ Service Now":
             st.caption("Nada encontrado com os filtros atuais.")
         else:
             tabela = view.copy()
-            tabela["Situação"]  = tabela["_vencido"].map({True: "🔴 Vencido", False: "🟡 No prazo"})
+            tabela["Situação"]  = tabela.apply(
+                lambda r: "🔴 Vencido" if r["_vencido"] else ("🟠 Crítico" if r["_critico"] else "🟡 No prazo"), axis=1)
             tabela["Aberto em"] = tabela[sn.SN_ABERTO].dt.strftime("%d/%m/%Y %H:%M")
             tabela["Prazo"]     = tabela[sn.SN_PRAZO].dt.strftime("%d/%m/%Y %H:%M")
             tabela_view = tabela[[sn.SN_TAREFA, sn.SN_CATEGORIA, "Situação", "Aberto em", "Prazo",
