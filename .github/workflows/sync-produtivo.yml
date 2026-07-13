@@ -24,8 +24,8 @@ jobs:
           PRODUTTIVO_TOKEN: ${{ secrets.PRODUTTIVO_TOKEN }}
           PRODUTTIVO_REGISTER: ${{ secrets.PRODUTTIVO_REGISTER }}
           GITHUB_TOKEN: ${{ secrets.GH_PAT_DASHBOARD }}
-          # quantos dias pra trás buscar (só atividades atualizadas nesse período);
-          # pode aumentar se faltar alguma atividade antiga, mas quanto maior, mais
-          # demorada fica cada sincronização
-          PRODUTTIVO_DIAS_HISTORICO: "90"
+          # quantos dias pra trás buscar; pode aumentar se faltar alguma atividade
+          # antiga, mas quanto maior, mais demorada fica cada sincronização
+          PRODUTTIVO_DIAS_HISTORICO: "90"    # atividades finalizadas
+          PRODUTTIVO_DIAS_ABERTAS: "365"     # atividades a realizar / em andamento
         run: python -u scripts/sync_produtivo.py

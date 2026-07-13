@@ -81,17 +81,20 @@ def _get_paginado(caminho, login, token, register, params=None, max_paginas=1000
     return resultados
 
 
-def listar_works(login, token, register, updated_after=None, statuses=None, rotulo=None):
+def listar_works(login, token, register, updated_after=None, statuses=None, actives=True, rotulo=None):
     """Busca todas as atividades (/works). `updated_after` (AAAA-MM-DD) filtra só
     as atualizadas desde essa data; `statuses` (lista) filtra só os status
-    escolhidos (ex: ["not_started", "started"]) — os dois combinados permitem
-    buscar as atividades em aberto sem limite de data (poucas) separado das
-    finalizadas com um período curto (que crescem sem parar)."""
+    escolhidos (ex: ["not_started", "started"]); `actives=True` (padrão) filtra
+    só atividades ativas — sem isso, a conta trouxe dezenas de milhares de
+    atividades "em aberto" muito além do que aparece no app do Produttivo (121
+    no export manual testado vs. mais de 50 mil sem esse filtro)."""
     params = {}
     if updated_after:
         params["updated_after"] = updated_after
     if statuses:
         params["statuses[]"] = statuses
+    if actives is not None:
+        params["actives"] = "true" if actives else "false"
     return _get_paginado("/works", login, token, register, params, rotulo=rotulo)
 
 

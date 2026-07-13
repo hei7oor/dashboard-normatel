@@ -36,10 +36,16 @@ import pandas as pd
 from produtivo_api import listar_works, listar_resource_places, ProdutivoError
 from github_store import gravar_arquivo_binario, REPO_PADRAO
 
-DIAS_HISTORICO_PADRAO = 90  # busca só atividades atualizadas nos últimos N dias
-                            # (sem isso, a 1a sincronização baixa TODO o histórico
-                            # da conta, página por página — já demorou mais de 4h
-                            # numa conta com muitos anos de atividades acumuladas)
+DIAS_FINALIZADAS_PADRAO = 90    # atividades finalizadas: acumulam ano após ano,
+                                # então busca só as atualizadas nos últimos N dias
+                                # (sem isso, baixa TODO o histórico da conta —
+                                # já demorou mais de 4h numa conta com muitos anos
+                                # de atividades acumuladas)
+DIAS_ABERTAS_PADRAO = 365       # em aberto (a realizar/andamento): não deveriam
+                                # crescer sem limite, mas usa 1 ano como rede de
+                                # segurança (junto com actives=true) — sem os dois,
+                                # a conta testada trouxe 50 mil+ "em aberto" contra
+                                # só 137 no export manual do mesmo dia
 
 STATUS_PARA_ARQUIVO = {
     "not_started": ("REALIZAR.xlsx", "A realizar"),
@@ -123,24 +129,27 @@ def main():
         print("GITHUB_TOKEN não configurado — não é possível gravar os arquivos no repositório.", flush=True)
         return
 
-    dias = int(os.environ.get("PRODUTTIVO_DIAS_HISTORICO", DIAS_HISTORICO_PADRAO))
-    updated_after = (datetime.now(timezone.utc) - timedelta(days=dias)).strftime("%Y-%m-%d")
+    agora = datetime.now(timezone.utc)
+    dias_fin = int(os.environ.get("PRODUTTIVO_DIAS_HISTORICO", DIAS_FINALIZADAS_PADRAO))
+    dias_abertas = int(os.environ.get("PRODUTTIVO_DIAS_ABERTAS", DIAS_ABERTAS_PADRAO))
+    updated_after_fin = (agora - timedelta(days=dias_fin)).strftime("%Y-%m-%d")
+    updated_after_abertas = (agora - timedelta(days=dias_abertas)).strftime("%Y-%m-%d")
 
     try:
-        # atividades em aberto: sem limite de data (não crescem indefinidamente,
-        # são só o que ainda não foi concluído)
-        abertas = listar_works(login, token, register,
+        # atividades em aberto: actives=true + até 1 ano é rede de segurança —
+        # sem isso a conta trouxe 50 mil+ registros contra só 137 no export manual
+        abertas = listar_works(login, token, register, updated_after=updated_after_abertas,
                                 statuses=["not_started", "started"], rotulo="em aberto")
-        # finalizadas: essas sim acumulam ano após ano, então limita ao período
-        # recente (senão a sincronização baixa anos de histórico a cada execução)
-        finalizadas = listar_works(login, token, register, updated_after=updated_after,
+        # finalizadas: acumulam ano após ano, limita ao período recente (senão a
+        # sincronização baixa anos de histórico a cada execução)
+        finalizadas = listar_works(login, token, register, updated_after=updated_after_fin,
                                     statuses=["finished", "reviewed"], rotulo="finalizadas")
         works = abertas + finalizadas
         resource_places = listar_resource_places(login, token, register)
     except ProdutivoError as e:
         print(f"Falha ao buscar dados do Produttivo: {e}", flush=True)
         return
-    print(f"{len(abertas)} em aberto + {len(finalizadas)} finalizadas (últimos {dias} dias) "
+    print(f"{len(abertas)} em aberto + {len(finalizadas)} finalizadas (últimos {dias_fin} dias) "
           f"+ {len(resource_places)} clientes/locais recebidos do Produttivo.", flush=True)
 
     tabelas = montar_tabelas(works, resource_places)
