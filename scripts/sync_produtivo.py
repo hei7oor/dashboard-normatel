@@ -26,7 +26,7 @@ Mapeamento de status do Produttivo -> arquivo/rótulo usado pelo dashboard:
 import io
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, RAIZ)
@@ -35,6 +35,11 @@ import pandas as pd
 
 from produtivo_api import listar_works, listar_resource_places, ProdutivoError
 from github_store import gravar_arquivo_binario, REPO_PADRAO
+
+DIAS_HISTORICO_PADRAO = 90  # busca só atividades atualizadas nos últimos N dias
+                            # (sem isso, a 1a sincronização baixa TODO o histórico
+                            # da conta, página por página — já demorou mais de 4h
+                            # numa conta com muitos anos de atividades acumuladas)
 
 STATUS_PARA_ARQUIVO = {
     "not_started": ("REALIZAR.xlsx", "A realizar"),
@@ -118,12 +123,17 @@ def main():
         print("GITHUB_TOKEN não configurado — não é possível gravar os arquivos no repositório.")
         return
 
+    dias = int(os.environ.get("PRODUTTIVO_DIAS_HISTORICO", DIAS_HISTORICO_PADRAO))
+    updated_after = (datetime.now(timezone.utc) - timedelta(days=dias)).strftime("%Y-%m-%d")
+
+    print(f"Buscando atividades atualizadas desde {updated_after} (últimos {dias} dias)...")
     try:
-        works = listar_works(login, token, register)
+        works = listar_works(login, token, register, updated_after=updated_after)
         resource_places = listar_resource_places(login, token, register)
     except ProdutivoError as e:
         print(f"Falha ao buscar dados do Produttivo: {e}")
         return
+    print(f"{len(works)} atividades e {len(resource_places)} clientes/locais recebidos do Produttivo.")
 
     tabelas = montar_tabelas(works, resource_places)
     agora = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
