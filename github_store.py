@@ -34,16 +34,54 @@ def baixar_arquivo(caminho_repo, token, repo=REPO_PADRAO, ref=BRANCH_PADRAO):
     return conteudo, dados["sha"]
 
 
-def _commit(caminho_repo, conteudo_texto, sha, mensagem, token, repo, ref):
+def _commit_bytes(caminho_repo, conteudo_bytes, sha, mensagem, token, repo, ref):
     url = f"{API_BASE}/repos/{repo}/contents/{caminho_repo}"
     payload = {
         "message": mensagem,
-        "content": base64.b64encode(conteudo_texto.encode("utf-8")).decode("ascii"),
+        "content": base64.b64encode(conteudo_bytes).decode("ascii"),
         "branch": ref,
     }
     if sha:
         payload["sha"] = sha
     return requests.put(url, headers=_headers(token), json=payload, timeout=20)
+
+
+def _commit(caminho_repo, conteudo_texto, sha, mensagem, token, repo, ref):
+    return _commit_bytes(caminho_repo, conteudo_texto.encode("utf-8"), sha, mensagem, token, repo, ref)
+
+
+def obter_sha(caminho_repo, token, repo=REPO_PADRAO, ref=BRANCH_PADRAO):
+    """Retorna o sha do arquivo no repo (para poder sobrescrever), ou None se ele
+    ainda não existir. Diferente de baixar_arquivo(), não decodifica o conteúdo
+    como texto — serve tanto para arquivo texto quanto binário (xlsx)."""
+    url = f"{API_BASE}/repos/{repo}/contents/{caminho_repo}"
+    r = requests.get(url, headers=_headers(token), params={"ref": ref}, timeout=20)
+    if r.status_code == 404:
+        return None
+    r.raise_for_status()
+    return r.json()["sha"]
+
+
+def gravar_arquivo_binario(caminho_repo, conteudo_bytes, mensagem, token,
+                            repo=REPO_PADRAO, ref=BRANCH_PADRAO, tentativas=3):
+    """Cria ou sobrescreve um arquivo binário (ex: .xlsx) no repo via commit direto.
+    Retorna (sucesso: bool, erro: str|None). Faz retry em caso de conflito de sha
+    (commit concorrente), igual a gravar_linha_append()."""
+    for tentativa in range(tentativas):
+        try:
+            sha = obter_sha(caminho_repo, token, repo=repo, ref=ref)
+            resp = _commit_bytes(caminho_repo, conteudo_bytes, sha, mensagem, token, repo, ref)
+            if resp.status_code in (200, 201):
+                return True, None
+            if resp.status_code == 409:
+                time.sleep(1)
+                continue
+            return False, f"GitHub API respondeu {resp.status_code}: {resp.text[:300]}"
+        except requests.RequestException as e:
+            if tentativa == tentativas - 1:
+                return False, str(e)
+            time.sleep(1)
+    return False, "Não foi possível gravar após múltiplas tentativas (conflito de commit)."
 
 
 def gravar_linha_append(caminho_repo, colunas, nova_linha, mensagem, token,

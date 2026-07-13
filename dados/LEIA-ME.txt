@@ -17,6 +17,13 @@ Produtivo — Atividades de Campo:
   ANDAMENTO.xlsx    -> status "Em andamento"
   FINALIZADAS.xlsx  -> status "Finalizada"
 
+  Desde 2026-07-12, esses 3 arquivos são atualizados SOZINHOS a cada 2h
+  (06h-18h, seg-sáb) via API do Produttivo (GitHub Actions,
+  .github/workflows/sync-produtivo.yml, script scripts/sync_produtivo.py). NÃO é
+  mais necessário exportar e subir esses arquivos manualmente. Se precisar forçar
+  uma atualização na hora, rode o workflow "Sincronizar Produttivo" manualmente na
+  aba Actions do GitHub (botão "Run workflow").
+
 ------------------------------------------------------------
 RA / SP — SAMC Petrobras (Relatório de Acompanhamento / Solicitação de Providência):
   RA.xlsx  -> Relatório de Acompanhamento (exportado do SAMC)
