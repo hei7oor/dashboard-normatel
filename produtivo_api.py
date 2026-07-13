@@ -17,8 +17,9 @@ import time
 import requests
 
 BASE_URL = "https://app.produttivo.com.br"
-TIMEOUT = 30
+TIMEOUT = 60
 PAUSA_ENTRE_PAGINAS = 0.3
+TENTATIVAS_POR_PAGINA = 3
 
 
 class ProdutivoError(Exception):
@@ -35,34 +36,44 @@ def _headers(login, token, register):
     }
 
 
-def _get_paginado(caminho, login, token, register, params=None, max_paginas=1000):
+def _get_pagina(url, headers, params):
+    """Busca uma página, tentando de novo (com espera crescente) se der problema
+    de rede/timeout — uma instabilidade passageira não pode derrubar a sincronização
+    inteira depois de já ter buscado várias páginas com sucesso."""
+    ultimo_erro = None
+    for tentativa in range(TENTATIVAS_POR_PAGINA):
+        try:
+            r = requests.get(url, headers=headers, params=params, timeout=TIMEOUT)
+        except requests.RequestException as e:
+            ultimo_erro = e
+            time.sleep(2 ** tentativa)  # 1s, 2s, 4s
+            continue
+        if r.status_code == 401:
+            raise ProdutivoError("Login/token do Produttivo inválido ou expirado.")
+        if not r.ok:
+            raise ProdutivoError(f"Produttivo respondeu {r.status_code}: {r.text[:300]}")
+        return r.json()
+    raise ProdutivoError(f"Falha de conexão com o Produttivo: {ultimo_erro}")
+
+
+def _get_paginado(caminho, login, token, register, params=None, max_paginas=1000, rotulo=None):
     """Busca todas as páginas de um endpoint de listagem (results + meta.total_pages)
     e devolve a lista completa de resultados."""
     if not (login and token and register):
         raise ProdutivoError(
             "Credenciais do Produttivo não configuradas (login/token/register)."
         )
+    headers = _headers(login, token, register)
     params = dict(params or {})
     resultados = []
     pagina = 1
     while True:
         params["page"] = pagina
-        try:
-            r = requests.get(
-                f"{BASE_URL}{caminho}",
-                headers=_headers(login, token, register),
-                params=params,
-                timeout=TIMEOUT,
-            )
-        except requests.RequestException as e:
-            raise ProdutivoError(f"Falha de conexão com o Produttivo: {e}") from e
-        if r.status_code == 401:
-            raise ProdutivoError("Login/token do Produttivo inválido ou expirado.")
-        if not r.ok:
-            raise ProdutivoError(f"Produttivo respondeu {r.status_code}: {r.text[:300]}")
-        corpo = r.json()
+        corpo = _get_pagina(f"{BASE_URL}{caminho}", headers, params)
         resultados.extend(corpo.get("results", []))
         total_paginas = corpo.get("meta", {}).get("total_pages", 1)
+        if rotulo:
+            print(f"  {rotulo}: página {pagina}/{total_paginas} ({len(resultados)} itens até agora)", flush=True)
         if pagina >= total_paginas or pagina >= max_paginas:
             break
         pagina += 1
@@ -70,11 +81,18 @@ def _get_paginado(caminho, login, token, register, params=None, max_paginas=1000
     return resultados
 
 
-def listar_works(login, token, register, updated_after=None):
+def listar_works(login, token, register, updated_after=None, statuses=None, rotulo=None):
     """Busca todas as atividades (/works). `updated_after` (AAAA-MM-DD) filtra só
-    as atualizadas desde essa data, para sincronizações incrementais."""
-    params = {"updated_after": updated_after} if updated_after else {}
-    return _get_paginado("/works", login, token, register, params)
+    as atualizadas desde essa data; `statuses` (lista) filtra só os status
+    escolhidos (ex: ["not_started", "started"]) — os dois combinados permitem
+    buscar as atividades em aberto sem limite de data (poucas) separado das
+    finalizadas com um período curto (que crescem sem parar)."""
+    params = {}
+    if updated_after:
+        params["updated_after"] = updated_after
+    if statuses:
+        params["statuses[]"] = statuses
+    return _get_paginado("/works", login, token, register, params, rotulo=rotulo)
 
 
 def listar_resource_places(login, token, register):

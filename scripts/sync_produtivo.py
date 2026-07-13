@@ -120,20 +120,28 @@ def main():
     token_gh = os.environ.get("GITHUB_TOKEN")
 
     if not token_gh:
-        print("GITHUB_TOKEN não configurado — não é possível gravar os arquivos no repositório.")
+        print("GITHUB_TOKEN não configurado — não é possível gravar os arquivos no repositório.", flush=True)
         return
 
     dias = int(os.environ.get("PRODUTTIVO_DIAS_HISTORICO", DIAS_HISTORICO_PADRAO))
     updated_after = (datetime.now(timezone.utc) - timedelta(days=dias)).strftime("%Y-%m-%d")
 
-    print(f"Buscando atividades atualizadas desde {updated_after} (últimos {dias} dias)...")
     try:
-        works = listar_works(login, token, register, updated_after=updated_after)
+        # atividades em aberto: sem limite de data (não crescem indefinidamente,
+        # são só o que ainda não foi concluído)
+        abertas = listar_works(login, token, register,
+                                statuses=["not_started", "started"], rotulo="em aberto")
+        # finalizadas: essas sim acumulam ano após ano, então limita ao período
+        # recente (senão a sincronização baixa anos de histórico a cada execução)
+        finalizadas = listar_works(login, token, register, updated_after=updated_after,
+                                    statuses=["finished", "reviewed"], rotulo="finalizadas")
+        works = abertas + finalizadas
         resource_places = listar_resource_places(login, token, register)
     except ProdutivoError as e:
-        print(f"Falha ao buscar dados do Produttivo: {e}")
+        print(f"Falha ao buscar dados do Produttivo: {e}", flush=True)
         return
-    print(f"{len(works)} atividades e {len(resource_places)} clientes/locais recebidos do Produttivo.")
+    print(f"{len(abertas)} em aberto + {len(finalizadas)} finalizadas (últimos {dias} dias) "
+          f"+ {len(resource_places)} clientes/locais recebidos do Produttivo.", flush=True)
 
     tabelas = montar_tabelas(works, resource_places)
     agora = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")

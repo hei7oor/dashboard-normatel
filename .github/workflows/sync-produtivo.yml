@@ -28,4 +28,4 @@ jobs:
           # pode aumentar se faltar alguma atividade antiga, mas quanto maior, mais
           # demorada fica cada sincronização
           PRODUTTIVO_DIAS_HISTORICO: "90"
-        run: python scripts/sync_produtivo.py
+        run: python -u scripts/sync_produtivo.py
