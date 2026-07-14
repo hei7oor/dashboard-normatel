@@ -1,8 +1,11 @@
 name: Sincronizar Produttivo
 
 on:
-  schedule:
-    - cron: "0 9-21/2 * * 1-6"   # a cada 2h, das 06h às 18h (Brasília), seg-sáb
+  # agendamento DESLIGADO temporariamente (2026-07-14) — o filtro actives=true
+  # não se comportou como o esperado numa conta real (trouxe ~30 mil "atividades"
+  # em REALIZAR.xlsx e 0 em FINALIZADAS.xlsx, sobrescrevendo dados bons). Só
+  # religar depois de validar o mapeamento de status/filtros com dados reais.
+  # - cron: "0 9-21/2 * * 1-6"   # a cada 2h, das 06h às 18h (Brasília), seg-sáb
   workflow_dispatch: {}          # permite rodar manualmente pela aba "Actions", para testar
 
 jobs:
