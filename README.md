@@ -1,0 +1,61 @@
+
+  PASTA DE DADOS — Dashboard Planejamento Normatel
+
+
+Coloque aqui os arquivos Excel e o app carrega automaticamente.
+
+------------------------------------------------------------
+SAP — Ordens de Manutenção (1 arquivo, 1 aba por base):
+  SAP.xlsx  ->  abas: UTGC, UTGSUL, TIMS
+     Colunas usadas: ordem, codigo ABC, Status do sistema,
+     Texto breve, Data entr., Data-base fim, Data real do fim,
+     GPM (disciplina), CenTrabPr., Local de instalacao, pln.manut.
+     (pln.manut. preenchido = PREVENTIVA, vazio = CORRETIVA)
+
+Produtivo — Atividades de Campo:
+  REALIZAR.xlsx     -> status "A realizar"
+  ANDAMENTO.xlsx    -> status "Em andamento"
+  FINALIZADAS.xlsx  -> status "Finalizada"
+
+  Desde 2026-07-12, esses 3 arquivos são atualizados SOZINHOS a cada 2h
+  (06h-18h, seg-sáb) via API do Produttivo (GitHub Actions,
+  .github/workflows/sync-produtivo.yml, script scripts/sync_produtivo.py). NÃO é
+  mais necessário exportar e subir esses arquivos manualmente. Se precisar forçar
+  uma atualização na hora, rode o workflow "Sincronizar Produttivo" manualmente na
+  aba Actions do GitHub (botão "Run workflow").
+
+------------------------------------------------------------
+RA / SP — SAMC Petrobras (Relatório de Acompanhamento / Solicitação de Providência):
+  RA.xlsx  -> Relatório de Acompanhamento (exportado do SAMC)
+  SP.xlsx  -> Solicitações de Providência (exportado do SAMC)
+     Datas no formato DD/MM/AAAA (atenção: diferente do SAP, que usa DD.MM.AAAA)
+     Chave: "Número" (RA) e "Número da SP" (SP)
+
+  respostas_manuais.csv -> gerado automaticamente pelo próprio app quando um
+  coordenador/supervisor registra uma resposta pela aba "📨 RA / SP" do
+  dashboard. NÃO editar nem substituir este arquivo manualmente — ele é
+  gravado direto no GitHub pelo app (histórico de respostas registradas).
+
+  historico_kpis.csv -> gerado automaticamente todo dia às 07h pelo status
+  report diário (GitHub Actions). Também não editar manualmente.
+
+------------------------------------------------------------
+Service Now — chamados prediais/facilities:
+  SN.xlsx -> export do ServiceNow (chamados CSC, ex: CSC_GP_COMP_ADM_PREDIAL_UTGC)
+     Chave: "Tarefa" (ex: CSC0833999)
+     "Encerrado" vazio = chamado em aberto
+     "Hora da violação" = prazo do ANS (usado para calcular atraso/prioridade)
+
+------------------------------------------------------------
+COMO ATUALIZAR:
+  1. Exporte a planilha nova do SAP, Produtivo, RA, SP ou Service Now
+  2. Substitua o arquivo nesta pasta (mesmo nome)
+  3. No app, clique em "Atualizar" (ou Reboot no Streamlit Cloud)
+
+REGRAS:
+  - O nome do arquivo SAP precisa conter "SAP"
+  - O nome dos arquivos do SAMC precisa conter "RA" ou "SP"
+  - O nome do arquivo do Service Now precisa conter "SN"
+  - Datas no formato DD.MM.AAAA (SAP/Produtivo) ou DD/MM/AAAA (RA/SP)
+  - Formatos aceitos: .xlsx, .xls, .csv
+============================================================
