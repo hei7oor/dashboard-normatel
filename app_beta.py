@@ -2,7 +2,7 @@
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import json, io, base64, os, re, time
+import json, io, base64, os, re, time, unicodedata
 from datetime import datetime, date
 
 import ra_sp
@@ -442,6 +442,18 @@ def _achar_col(cols, *chaves):
             return c
     return None
 
+def _sem_acento(s):
+    return "".join(ch for ch in unicodedata.normalize("NFKD", s) if not unicodedata.combining(ch))
+
+def _achar_col_sem_acento(cols, *chaves):
+    """Igual a _achar_col, mas ignora acentos — algumas bases exportam o SAP com
+    acentuação diferente na mesma coluna (ex: "usuário" vs "usúario")."""
+    for c in cols:
+        cl = _sem_acento(str(c).lower())
+        if all(k in cl for k in chaves):
+            return c
+    return None
+
 @st.cache_data(show_spinner=False)
 def ler_sap(caminho):
     """Lê SAP.xlsx — cada aba é uma base. Mapeia colunas e deriva tipo."""
@@ -453,8 +465,8 @@ def ler_sap(caminho):
         cols = list(df.columns)
         mapa = {
             _achar_col(cols, "ordem"):        S_ORDEM,
-            _achar_col(cols, "status", "sis"): S_STATUS,
-            _achar_col(cols, "status", "u"):   S_STATUSUSR,
+            _achar_col(cols, "status", "sis"):            S_STATUS,
+            _achar_col_sem_acento(cols, "status", "usuario"): S_STATUSUSR,
             _achar_col(cols, "texto"):         S_TEXTO,
             _achar_col(cols, "entr"):          S_ENT,
             _achar_col(cols, "base", "fim"):   S_BASE,
