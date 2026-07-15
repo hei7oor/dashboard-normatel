@@ -42,9 +42,10 @@ AM  = "#FFA000"   # âmbar atenção
 AZ1 = "#1565C0"   # azul UTGSUL
 AZ2 = "#E65100"   # laranja TIMS
 AZ3 = "#2E7D32"   # verde UTGC
+AZ4 = "#AD1457"   # rosa EDIVIT
 ROXO= "#6A1B9A"   # roxo Produtivo
 
-COR_BASE = {"UTGSUL": AZ1, "TIMS": AZ2, "UTGC": AZ3}
+COR_BASE = {"UTGSUL": AZ1, "TIMS": AZ2, "UTGC": AZ3, "EDIVIT": AZ4}
 
 # ── Formato brasileiro de números (milhar com ponto, sem vírgula) ─────────────
 def fmt_br(x):
@@ -379,7 +380,7 @@ div[data-testid="stHorizontalBlock"] > div:nth-child(2) > div[data-testid="stVer
 # ════════════════════════════════════════════════════════════════════════════
 # CONSTANTES / COLUNAS
 # ════════════════════════════════════════════════════════════════════════════
-BASES_SAP = ["UTGSUL","TIMS","UTGC"]
+BASES_SAP = ["UTGSUL","TIMS","UTGC","EDIVIT"]
 PASTA     = "dados"
 
 # Nomes canônicos internos das colunas SAP (mapeados do Excel real)
