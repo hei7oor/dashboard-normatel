@@ -17,12 +17,17 @@ Produtivo — Atividades de Campo:
   ANDAMENTO.xlsx    -> status "Em andamento"
   FINALIZADAS.xlsx  -> status "Finalizada"
 
-  Desde 2026-07-12, esses 3 arquivos são atualizados SOZINHOS a cada 2h
-  (06h-18h, seg-sáb) via API do Produttivo (GitHub Actions,
-  .github/workflows/sync-produtivo.yml, script scripts/sync_produtivo.py). NÃO é
-  mais necessário exportar e subir esses arquivos manualmente. Se precisar forçar
-  uma atualização na hora, rode o workflow "Sincronizar Produttivo" manualmente na
-  aba Actions do GitHub (botão "Run workflow").
+  A sincronização automática via API (.github/workflows/sync-produtivo.yml) está
+  DESLIGADA desde 2026-07-14 — trouxe dados errados numa conta real (veja o
+  comentário no início do arquivo do workflow). Por enquanto, atualizar do jeito
+  manual de sempre (exportar do Produttivo e substituir o arquivo aqui).
+
+  EDIVIT (base nova, adicionada em 2026-07-15): como nem toda atividade do
+  Produttivo da EDIVIT tem "EDIVIT" no título, ela usa 3 arquivos SEPARADOS
+  (em vez de entrar nos 3 de cima por padrão de nome):
+    REALIZAR_EDIVIT.xlsx / ANDAMENTO_EDIVIT.xlsx / FINALIZADAS_EDIVIT.xlsx
+  Essa base ainda não tem aba própria no SAP.xlsx nem export do Service Now —
+  atualizar assim que chegarem, mesmo formato dos outros.
 
 ------------------------------------------------------------
 RA / SP — SAMC Petrobras (Relatório de Acompanhamento / Solicitação de Providência):

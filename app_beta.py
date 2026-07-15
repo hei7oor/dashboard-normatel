@@ -405,6 +405,16 @@ MAPA = {
     "sn": ["SN"],   # SN.xlsx — chamados do ServiceNow
 }
 
+# Base nova (EDIVIT) que ainda não tem aba própria no SAP.xlsx — o Produtivo dela
+# vem em arquivos separados (nomes fixos, não por busca de padrão) porque o export
+# não menciona "EDIVIT" em todos os títulos, então não dá pra confiar só na
+# extração por regex do Título usada em ler_produtivo().
+MAPA_EDIVIT_PROD = {
+    "realizar":    "REALIZAR_EDIVIT.xlsx",
+    "andamento":   "ANDAMENTO_EDIVIT.xlsx",
+    "finalizadas": "FINALIZADAS_EDIVIT.xlsx",
+}
+
 CAMINHO_RESPOSTAS    = os.path.join(PASTA, "respostas_manuais.csv")
 CAMINHO_HISTORICO    = os.path.join(PASTA, "historico_kpis.csv")
 CAMINHO_RESPONSAVEIS = os.path.join(PASTA, "responsaveis_sp.csv")
@@ -421,8 +431,13 @@ DISCIPLINA_NOME = {
 # ════════════════════════════════════════════════════════════════════════════
 # FUNÇÕES DE LEITURA
 # ════════════════════════════════════════════════════════════════════════════
-# arquivos gerados pelo próprio app (não são fonte de dados a ser localizada por padrão de nome)
-ARQUIVOS_INTERNOS = {"RESPOSTAS_MANUAIS.CSV", "HISTORICO_KPIS.CSV", "RESPONSAVEIS_SP.CSV"}
+# arquivos que a busca genérica por padrão de nome deve ignorar: gerados pelo
+# próprio app, ou os arquivos de base extra (EDIVIT) que são lidos por caminho
+# fixo (MAPA_EDIVIT_PROD) — sem isso, "REALIZAR_EDIVIT.xlsx" poderia ser
+# encontrado no lugar de "REALIZAR.xlsx" pela busca genérica, dependendo da
+# ordem que o sistema operacional lista os arquivos da pasta.
+ARQUIVOS_INTERNOS = {"RESPOSTAS_MANUAIS.CSV", "HISTORICO_KPIS.CSV", "RESPONSAVEIS_SP.CSV"} \
+    | {nome.upper() for nome in MAPA_EDIVIT_PROD.values()}
 
 def encontrar_arquivo(pasta, padroes):
     if not os.path.isdir(pasta): return None
@@ -550,12 +565,24 @@ def carregar_todos():
     # Produtivo
     for key, padroes in MAPA["prod"].items():
         c = encontrar_arquivo(PASTA, padroes)
+        df = None
         if c:
             try:
                 df = ler_produtivo(c)
-                prod[key] = df
-                log.append((key, len(df), "prod"))
-            except: pass
+            except Exception:
+                df = None
+        # base extra (EDIVIT): arquivo separado, caminho fixo, junta com o principal
+        caminho_edivit = os.path.join(PASTA, MAPA_EDIVIT_PROD[key])
+        if os.path.isfile(caminho_edivit):
+            try:
+                df_edivit = ler_produtivo(caminho_edivit)
+                df_edivit["_base"] = "EDIVIT"
+                df = pd.concat([df, df_edivit], ignore_index=True) if df is not None else df_edivit
+            except Exception:
+                pass
+        if df is not None:
+            prod[key] = df
+            log.append((key, len(df), "prod"))
     # RA / SP — SAMC Petrobras
     ra_df, sp_df = pd.DataFrame(), pd.DataFrame()
     c = encontrar_arquivo(PASTA, MAPA["ra"])
@@ -668,6 +695,11 @@ with st.container():
     with f2:
         st.markdown('<div class="flt-lbl">🏭 BASES</div>', unsafe_allow_html=True)
         bases_disp = sap_ok if sap_ok else ["UTGSUL","TIMS","UTGC"]
+        # bases que só existem no Produtivo (ex: EDIVIT, antes de ter aba no SAP.xlsx)
+        if prod_ok:
+            bases_so_prod = [b for b in sorted(PROD["_base"].unique().tolist())
+                              if b not in bases_disp and b != "OUTROS"]
+            bases_disp = bases_disp + bases_so_prod
         bases_sel  = st.multiselect("b", bases_disp, default=[],
                                     placeholder="Todas as bases",
                                     key="bases_sel", label_visibility="collapsed")
