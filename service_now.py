@@ -41,6 +41,12 @@ def ler_sn(caminho):
             df[col] = pd.to_datetime(df[col], errors="coerce")
     if SN_CATEGORIA in df.columns:
         df[SN_CATEGORIA] = df[SN_CATEGORIA].astype(str).str.strip()
+    if SN_GRUPO in df.columns:
+        # ex: "CSC_GP_COMP_ADM_PREDIAL_UTGC" -> "UTGC"
+        df["_base"] = df[SN_GRUPO].astype(str).str.extract(
+            r"(UTGSUL|TIMS|UTGC|EDIVIT)", expand=False).fillna("OUTROS")
+    else:
+        df["_base"] = "OUTROS"
     return df
 
 

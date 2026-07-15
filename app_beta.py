@@ -1519,7 +1519,17 @@ elif base_nav == "🛠️ Service Now":
     if sn_df.empty:
         st.info("Nenhum arquivo **SN.xlsx** encontrado em `dados/`. Exporte o relatório do ServiceNow e adicione-o à pasta.")
     else:
-        status_sn = sn.calcular_prioridade(sn_df, hoje=HOJE)
+        if "_base" in sn_df.columns and sn_df["_base"].nunique() > 1:
+            bases_sn_disp = sorted(sn_df["_base"].unique().tolist())
+            bases_sn_sel = st.multiselect("Base", bases_sn_disp, default=[],
+                                           placeholder="Todas as bases", key="sn_base_sel")
+            if not bases_sn_sel:
+                bases_sn_sel = bases_sn_disp
+            sn_df_f = sn_df[sn_df["_base"].isin(bases_sn_sel)]
+        else:
+            sn_df_f = sn_df
+
+        status_sn = sn.calcular_prioridade(sn_df_f, hoje=HOJE)
         kp = sn.kpis_sn(status_sn)
 
         k1,k2,k3,k4,k5,k6 = st.columns(6)
